@@ -10,7 +10,7 @@ from backend.app.db import models
 from backend.app.db.base import Base
 from backend.app.db.session import get_db
 from backend.app.main import app
-
+from sqlalchemy import func, select
 
 @pytest.fixture
 def client() -> Generator[TestClient, None, None]:
@@ -188,3 +188,113 @@ def test_unknown_account_returns_404(client: TestClient) -> None:
     )
 
     assert response.status_code == 404
+
+
+def test_identical_retry_returns_stored_decision(
+    client: TestClient,
+) -> None:
+    seed_account(client)
+
+    payload = {
+        "request_id": "req_idempotent_001",
+        "customer_id": "cust_service_001",
+        "account_id": "acct_service_001",
+        "operation": "view_account",
+    }
+
+    first_response = client.post("/servicing/requests", json=payload)
+    second_response = client.post("/servicing/requests", json=payload)
+
+    assert first_response.status_code == 200
+    assert second_response.status_code == 200
+    assert second_response.json() == first_response.json()
+
+
+def test_reused_request_id_with_different_payload_returns_conflict(
+    client: TestClient,
+) -> None:
+    seed_account(client)
+
+    payload = {
+        "request_id": "req_idempotent_002",
+        "customer_id": "cust_service_001",
+        "account_id": "acct_service_001",
+        "operation": "view_account",
+    }
+
+    first_response = client.post("/servicing/requests", json=payload)
+
+    changed_payload = {
+        **payload,
+        "operation": "request_payment",
+        "amount": "10.00",
+    }
+    second_response = client.post(
+        "/servicing/requests",
+        json=changed_payload,
+    )
+
+    assert first_response.status_code == 200
+    assert second_response.status_code == 409
+    assert second_response.json()["detail"] == (
+        "Request ID already used with different request details"
+    )
+
+
+def test_denied_decision_is_stable_on_retry(
+    client: TestClient,
+) -> None:
+    seed_account(client)
+
+    payload = {
+        "request_id": "req_idempotent_003",
+        "customer_id": "cust_someone_else",
+        "account_id": "acct_service_001",
+        "operation": "view_account",
+    }
+
+    first_response = client.post("/servicing/requests", json=payload)
+    second_response = client.post("/servicing/requests", json=payload)
+
+    assert first_response.status_code == 200
+    assert first_response.json()["decision"] == "deny"
+    assert second_response.status_code == 200
+    assert second_response.json() == first_response.json()
+
+
+def test_identical_retry_creates_only_one_database_record(
+    client: TestClient,
+) -> None:
+    seed_account(client)
+
+    payload = {
+        "request_id": "req_idempotent_single_record",
+        "customer_id": "cust_service_001",
+        "account_id": "acct_service_001",
+        "operation": "view_account",
+    }
+
+    first_response = client.post("/servicing/requests", json=payload)
+    second_response = client.post("/servicing/requests", json=payload)
+
+    assert first_response.status_code == 200
+    assert second_response.status_code == 200
+
+    # Query the same test database used by the API.
+    db_override = app.dependency_overrides[get_db]
+    db_generator = db_override()
+    db = next(db_generator)
+
+    try:
+        count = db.scalar(
+            select(func.count()).select_from(
+                models.ServicingRequestRecord
+            ).where(
+                models.ServicingRequestRecord.request_id
+                == "req_idempotent_single_record"
+            )
+        )
+        assert count == 1
+    finally:
+        db.close()
+        db_generator.close()

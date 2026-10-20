@@ -2,6 +2,8 @@ from decimal import Decimal
 
 from sqlalchemy import (
     CheckConstraint,
+    DateTime,
+    Enum,
     ForeignKey,
     Numeric,
     String,
@@ -9,6 +11,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column
 
 from backend.app.db.base import Base
+from datetime import datetime, timezone
 
 
 class CustomerRecord(Base):
@@ -61,5 +64,49 @@ class AccountRecord(Base):
         CheckConstraint(
             "status IN ('active', 'frozen', 'closed')",
             name="ck_accounts_status",
+        ),
+    )
+
+class ServicingRequestRecord(Base):
+    __tablename__ = "servicing_requests"
+
+    request_id: Mapped[str] = mapped_column(
+        String(100),
+        primary_key=True,
+    )
+    customer_id: Mapped[str] = mapped_column(
+        String(50),
+        nullable=False,
+    )
+    account_id: Mapped[str] = mapped_column(
+        String(50),
+        nullable=False,
+    )
+    operation: Mapped[str] = mapped_column(
+        String(30),
+        nullable=False,
+    )
+    amount: Mapped[Decimal | None] = mapped_column(
+        Numeric(12, 2),
+        nullable=True,
+    )
+    decision: Mapped[str] = mapped_column(
+        String(10),
+        nullable=False,
+    )
+    reason: Mapped[str] = mapped_column(
+        String(100),
+        nullable=False,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        nullable=False,
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "decision IN ('allow', 'deny')",
+            name="ck_servicing_requests_decision",
         ),
     )

@@ -113,3 +113,37 @@ def test_negative_account_balance_is_rejected(db_session):
         db_session.commit()
 
     db_session.rollback()
+
+
+def test_duplicate_servicing_request_id_is_rejected(db_session):
+    first_request = models.ServicingRequestRecord(
+        request_id="req_duplicate_001",
+        customer_id="cust_test_001",
+        account_id="acct_test_001",
+        operation="view_account",
+        amount=None,
+        decision="allow",
+        reason="policy_checks_passed",
+    )
+
+    db_session.add(first_request)
+    db_session.commit()
+
+    # Use a separate session to simulate another incoming request.
+    DuplicateSession = sessionmaker(bind=db_session.get_bind())
+
+    with DuplicateSession() as duplicate_session:
+        duplicate_request = models.ServicingRequestRecord(
+            request_id="req_duplicate_001",
+            customer_id="cust_test_001",
+            account_id="acct_test_001",
+            operation="view_account",
+            amount=None,
+            decision="allow",
+            reason="policy_checks_passed",
+        )
+
+        duplicate_session.add(duplicate_request)
+
+        with pytest.raises(IntegrityError):
+            duplicate_session.commit()
