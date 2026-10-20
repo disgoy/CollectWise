@@ -1,9 +1,9 @@
 from decimal import Decimal
+from datetime import datetime, timezone
 
 from sqlalchemy import (
     CheckConstraint,
     DateTime,
-    Enum,
     ForeignKey,
     Numeric,
     String,
@@ -11,8 +11,6 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column
 
 from backend.app.db.base import Base
-from datetime import datetime, timezone
-
 
 class CustomerRecord(Base):
     __tablename__ = "customers"
