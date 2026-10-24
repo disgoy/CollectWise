@@ -147,3 +147,41 @@ def test_duplicate_servicing_request_id_is_rejected(db_session):
 
         with pytest.raises(IntegrityError):
             duplicate_session.commit()
+
+
+def test_servicing_request_defaults_to_evaluated_status(db_session):
+    request = models.ServicingRequestRecord(
+        request_id="req_status_default_001",
+        customer_id="cust_test_001",
+        account_id="acct_test_001",
+        operation="view_account",
+        amount=None,
+        decision="allow",
+        reason="policy_checks_passed",
+    )
+
+    db_session.add(request)
+    db_session.commit()
+    db_session.refresh(request)
+
+    assert request.status == "evaluated"
+
+
+def test_invalid_servicing_request_status_is_rejected(db_session):
+    request = models.ServicingRequestRecord(
+        request_id="req_status_invalid_001",
+        customer_id="cust_test_001",
+        account_id="acct_test_001",
+        operation="view_account",
+        amount=None,
+        decision="allow",
+        reason="policy_checks_passed",
+        status="completed",
+    )
+
+    db_session.add(request)
+
+    with pytest.raises(IntegrityError):
+        db_session.commit()
+
+    db_session.rollback()

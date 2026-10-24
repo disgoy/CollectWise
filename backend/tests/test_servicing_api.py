@@ -241,6 +241,7 @@ def test_reused_request_id_with_different_payload_returns_conflict(
     )
 
 
+
 def test_denied_decision_is_stable_on_retry(
     client: TestClient,
 ) -> None:
@@ -260,6 +261,28 @@ def test_denied_decision_is_stable_on_retry(
     assert first_response.json()["decision"] == "deny"
     assert second_response.status_code == 200
     assert second_response.json() == first_response.json()
+
+    # A denied policy decision is still a completed evaluation.
+    from sqlalchemy import select
+    from backend.app.db.models import ServicingRequestRecord
+
+    # Access the same test database through the app's DB dependency.
+    from backend.app.db.session import get_db
+
+    db_generator = app.dependency_overrides[get_db]()
+    db = next(db_generator)
+    try:
+        record = db.scalar(
+            select(ServicingRequestRecord).where(
+                ServicingRequestRecord.request_id == "req_idempotent_003"
+            )
+        )
+        assert record is not None
+        assert record.decision == "deny"
+        assert record.status == "evaluated"
+    finally:
+        db_generator.close()
+
 
 
 def test_identical_retry_creates_only_one_database_record(
@@ -298,3 +321,74 @@ def test_identical_retry_creates_only_one_database_record(
     finally:
         db.close()
         db_generator.close()
+
+
+
+def test_servicing_request_history_returns_stored_record(
+    client: TestClient,
+) -> None:
+    seed_account(client)
+
+    payload = {
+        "request_id": "req_history_001",
+        "customer_id": "cust_service_001",
+        "account_id": "acct_service_001",
+        "operation": "view_account",
+    }
+
+    create_response = client.post("/servicing/requests", json=payload)
+    assert create_response.status_code == 200
+
+    history_response = client.get(
+        "/servicing/requests/req_history_001"
+    )
+
+    assert history_response.status_code == 200
+    history = history_response.json()
+    assert history["request_id"] == "req_history_001"
+    assert history["customer_id"] == "cust_service_001"
+    assert history["account_id"] == "acct_service_001"
+    assert history["operation"] == "view_account"
+    assert history["decision"] == "allow"
+    assert history["reason"] == "policy_checks_passed"
+    assert history["status"] == "evaluated"
+    assert history["created_at"]
+
+
+def test_servicing_request_history_returns_404_for_unknown_request(
+    client: TestClient,
+) -> None:
+    response = client.get(
+        "/servicing/requests/req_history_missing"
+    )
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Servicing request not found"
+
+
+
+def test_denied_request_history_preserves_original_decision(
+    client: TestClient,
+) -> None:
+    seed_account(client)
+
+    payload = {
+        "request_id": "req_history_denied_001",
+        "customer_id": "cust_someone_else",
+        "account_id": "acct_service_001",
+        "operation": "view_account",
+    }
+
+    create_response = client.post("/servicing/requests", json=payload)
+    assert create_response.status_code == 200
+    assert create_response.json()["decision"] == "deny"
+
+    history_response = client.get(
+        "/servicing/requests/req_history_denied_001"
+    )
+
+    assert history_response.status_code == 200
+    history = history_response.json()
+    assert history["decision"] == "deny"
+    assert history["reason"] == "customer_account_mismatch"
+    assert history["status"] == "evaluated"

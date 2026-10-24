@@ -9,7 +9,6 @@ from sqlalchemy import (
     String,
 )
 from sqlalchemy.orm import Mapped, mapped_column
-
 from backend.app.db.base import Base
 
 class CustomerRecord(Base):
@@ -96,6 +95,11 @@ class ServicingRequestRecord(Base):
         String(100),
         nullable=False,
     )
+    status: Mapped[str] = mapped_column(
+        String(20),
+        nullable=False,
+        default="evaluated",
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),
@@ -106,5 +110,9 @@ class ServicingRequestRecord(Base):
         CheckConstraint(
             "decision IN ('allow', 'deny')",
             name="ck_servicing_requests_decision",
+        ),
+        CheckConstraint(
+            "status IN ('received', 'evaluated', 'failed')",
+            name="ck_servicing_requests_status",
         ),
     )

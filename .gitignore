@@ -16,6 +16,7 @@ venv/
 
 # Databases
 *.db
+*.db.backup
 *.sqlite
 *.sqlite3
 

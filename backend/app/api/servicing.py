@@ -8,7 +8,10 @@ from backend.app.db.models import AccountRecord, ServicingRequestRecord
 from backend.app.db.session import get_db
 from backend.app.policies.servicing import authorize_request
 from backend.app.schemas.domain import Account, AccountStatus, ServicingRequest
-from backend.app.schemas.servicing import ServicingDecisionResponse
+from backend.app.schemas.servicing import (
+    ServicingDecisionResponse,
+    ServicingRequestHistoryResponse,
+)
 
 router = APIRouter(prefix="/servicing", tags=["Servicing"])
 
@@ -85,6 +88,7 @@ def evaluate_servicing_request(
         amount=request.amount,
         decision=result.decision.value,
         reason=result.reason,
+        status="evaluated",
     )
     db.add(record)
 
@@ -109,3 +113,31 @@ def evaluate_servicing_request(
 
     db.refresh(record)
     return _stored_response(record)
+
+@router.get(
+    "/requests/{request_id}",
+    response_model=ServicingRequestHistoryResponse,
+)
+def get_servicing_request_history(
+    request_id: str,
+    db: Session = Depends(get_db),
+) -> ServicingRequestHistoryResponse:
+    record = db.get(ServicingRequestRecord, request_id)
+
+    if record is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Servicing request not found",
+        )
+
+    return ServicingRequestHistoryResponse(
+        request_id=record.request_id,
+        customer_id=record.customer_id,
+        account_id=record.account_id,
+        operation=record.operation,
+        amount=record.amount,
+        decision=record.decision,
+        reason=record.reason,
+        status=record.status,
+        created_at=record.created_at,
+    )
