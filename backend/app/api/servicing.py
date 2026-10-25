@@ -1,10 +1,13 @@
-
+import json
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from backend.app.db.models import AccountRecord, ServicingRequestRecord
+from backend.app.db.models import (
+    AccountRecord,
+    ServicingAuditEvent,
+    ServicingRequestRecord,
+)
 from backend.app.db.session import get_db
 from backend.app.policies.servicing import authorize_request
 from backend.app.schemas.domain import Account, AccountStatus, ServicingRequest
@@ -39,6 +42,20 @@ def _stored_response(
         reason=stored.reason,
     )
 
+def _add_audit_event(
+    db: Session,
+    request_id: str,
+    event_type: str,
+    details: str | None = None,
+) -> None:
+    """Add an audit event to the current database transaction."""
+    db.add(
+        ServicingAuditEvent(
+            request_id=request_id,
+            event_type=event_type,
+            details=details,
+        )
+    )
 
 @router.post(
     "/requests",
@@ -79,7 +96,7 @@ def evaluate_servicing_request(
     # 3. Evaluate the request using deterministic policy rules.
     result = authorize_request(request, account)
 
-    # 4. Persist the decision so retries can return the same result.
+    # 4. Persist the request and its audit trail atomically.
     record = ServicingRequestRecord(
         request_id=request.request_id,
         customer_id=request.customer_id,
@@ -93,14 +110,42 @@ def evaluate_servicing_request(
     db.add(record)
 
     try:
+        # Flush the request first so audit events can reference it.
+        db.flush()
+
+        _add_audit_event(
+            db,
+            request.request_id,
+            "request_received",
+        )
+        _add_audit_event(
+            db,
+            request.request_id,
+            "policy_evaluated",
+            details=json.dumps(
+                {
+                    "decision": result.decision.value,
+                    "reason": result.reason,
+                }
+            ),
+        )
+        _add_audit_event(
+            db,
+            request.request_id,
+            "decision_persisted",
+        )
+
+        # One commit saves the request and all three events.
         db.commit()
+
     except IntegrityError:
-        # Another request may have saved this ID after our initial lookup.
+        # Roll back the entire transaction if any insert fails.
         db.rollback()
+
+        # A concurrent request may have saved this request ID.
         stored = db.get(ServicingRequestRecord, request.request_id)
 
         if stored is None:
-            # The integrity error wasn't caused by a duplicate request ID.
             raise
 
         if not _request_matches(stored, request):
@@ -113,6 +158,7 @@ def evaluate_servicing_request(
 
     db.refresh(record)
     return _stored_response(record)
+
 
 @router.get(
     "/requests/{request_id}",

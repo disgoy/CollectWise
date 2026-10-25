@@ -1,4 +1,4 @@
-
+import json
 from collections.abc import Generator
 import pytest
 from fastapi.testclient import TestClient
@@ -38,7 +38,7 @@ def client() -> Generator[TestClient, None, None]:
     app.dependency_overrides[get_db] = override_get_db
 
     try:
-        with TestClient(app) as test_client:
+        with TestClient(app, raise_server_exceptions=False) as test_client:
             yield test_client
     finally:
         app.dependency_overrides.clear()
@@ -392,3 +392,187 @@ def test_denied_request_history_preserves_original_decision(
     assert history["decision"] == "deny"
     assert history["reason"] == "customer_account_mismatch"
     assert history["status"] == "evaluated"
+
+
+def test_successful_request_creates_audit_events(
+    client: TestClient,
+) -> None:
+    seed_account(client)
+
+    response = client.post(
+        "/servicing/requests",
+        json={
+            "request_id": "req_audit_api_001",
+            "customer_id": "cust_service_001",
+            "account_id": "acct_service_001",
+            "operation": "view_account",
+        },
+    )
+
+    assert response.status_code == 200
+
+    # Read audit events from the same test database.
+    db_generator = app.dependency_overrides[get_db]()
+    db = next(db_generator)
+
+    try:
+        events = db.scalars(
+            select(models.ServicingAuditEvent)
+            .where(
+                models.ServicingAuditEvent.request_id
+                == "req_audit_api_001"
+            )
+            .order_by(models.ServicingAuditEvent.event_id)
+        ).all()
+
+        assert [event.event_type for event in events] == [
+            "request_received",
+            "policy_evaluated",
+            "decision_persisted",
+        ]
+        audit_details = json.loads(events[1].details)
+
+        assert audit_details == {
+            "decision": "allow",
+            "reason": "policy_checks_passed",
+        }
+
+    finally:
+        db_generator.close()
+
+def test_identical_retry_does_not_duplicate_audit_events(
+    client: TestClient,
+) -> None:
+    seed_account(client)
+
+    payload = {
+        "request_id": "req_audit_retry_001",
+        "customer_id": "cust_service_001",
+        "account_id": "acct_service_001",
+        "operation": "view_account",
+    }
+
+    first_response = client.post("/servicing/requests", json=payload)
+    second_response = client.post("/servicing/requests", json=payload)
+
+    assert first_response.status_code == 200
+    assert second_response.status_code == 200
+    assert second_response.json() == first_response.json()
+
+    db_generator = app.dependency_overrides[get_db]()
+    db = next(db_generator)
+
+    try:
+        event_count = db.scalar(
+            select(func.count())
+            .select_from(models.ServicingAuditEvent)
+            .where(
+                models.ServicingAuditEvent.request_id
+                == "req_audit_retry_001"
+            )
+        )
+
+        assert event_count == 3
+    finally:
+        db_generator.close()
+
+def test_denied_request_creates_audit_events(
+    client: TestClient,
+) -> None:
+    seed_account(client)
+
+    response = client.post(
+        "/servicing/requests",
+        json={
+            "request_id": "req_audit_denied_001",
+            "customer_id": "cust_someone_else",
+            "account_id": "acct_service_001",
+            "operation": "view_account",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["decision"] == "deny"
+    assert response.json()["reason"] == "customer_account_mismatch"
+
+    db_generator = app.dependency_overrides[get_db]()
+    db = next(db_generator)
+
+    try:
+        events = db.scalars(
+            select(models.ServicingAuditEvent)
+            .where(
+                models.ServicingAuditEvent.request_id
+                == "req_audit_denied_001"
+            )
+            .order_by(models.ServicingAuditEvent.event_id)
+        ).all()
+
+        assert [event.event_type for event in events] == [
+            "request_received",
+            "policy_evaluated",
+            "decision_persisted",
+        ]
+
+        assert '"decision": "deny"' in events[1].details
+        assert '"reason": "customer_account_mismatch"' in events[1].details
+    finally:
+        db_generator.close()
+
+def test_audit_event_failure_rolls_back_servicing_request(
+    client: TestClient,
+) -> None:
+    seed_account(client)
+
+    # Instead of modifying the shared model or schema, we'll use a
+    # database trigger to reject the policy_evaluated event.
+    db_generator = app.dependency_overrides[get_db]()
+    db = next(db_generator)
+
+    try:
+        db.connection().exec_driver_sql(
+            """
+            CREATE TRIGGER reject_policy_event
+            BEFORE INSERT ON servicing_audit_events
+            WHEN NEW.event_type = 'policy_evaluated'
+            BEGIN
+                SELECT RAISE(ABORT, 'simulated audit insert failure');
+            END;
+            """
+        )
+        db.commit()
+    finally:
+        db_generator.close()
+
+    response = client.post(
+        "/servicing/requests",
+        json={
+            "request_id": "req_audit_rollback_001",
+            "customer_id": "cust_service_001",
+            "account_id": "acct_service_001",
+            "operation": "view_account",
+        },
+    )
+
+    # The API should not report success when the audit transaction fails.
+    assert response.status_code >= 500
+
+    db_generator = app.dependency_overrides[get_db]()
+    db = next(db_generator)
+
+    try:
+        assert db.get(
+            models.ServicingRequestRecord,
+            "req_audit_rollback_001",
+        ) is None
+
+        events = db.scalars(
+            select(models.ServicingAuditEvent).where(
+                models.ServicingAuditEvent.request_id
+                == "req_audit_rollback_001"
+            )
+        ).all()
+
+        assert events == []
+    finally:
+        db_generator.close()

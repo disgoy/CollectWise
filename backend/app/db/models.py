@@ -7,6 +7,7 @@ from sqlalchemy import (
     ForeignKey,
     Numeric,
     String,
+    Text,
 )
 from sqlalchemy.orm import Mapped, mapped_column
 from backend.app.db.base import Base
@@ -114,5 +115,40 @@ class ServicingRequestRecord(Base):
         CheckConstraint(
             "status IN ('received', 'evaluated', 'failed')",
             name="ck_servicing_requests_status",
+        ),
+    )
+
+
+class ServicingAuditEvent(Base):
+    __tablename__ = "servicing_audit_events"
+
+    event_id: Mapped[int] = mapped_column(
+        primary_key=True,
+        autoincrement=True,
+    )
+    request_id: Mapped[str] = mapped_column(
+        ForeignKey("servicing_requests.request_id"),
+        nullable=False,
+        index=True,
+    )
+    event_type: Mapped[str] = mapped_column(
+        String(30),
+        nullable=False,
+    )
+    details: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        nullable=False,
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "event_type IN "
+            "('request_received', 'policy_evaluated', 'decision_persisted')",
+            name="ck_servicing_audit_events_type",
         ),
     )
