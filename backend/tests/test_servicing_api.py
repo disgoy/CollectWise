@@ -139,6 +139,69 @@ def test_valid_payment_request_is_only_evaluated(
     assert account_response.json()["balance"] == "500.00"
 
 
+def test_payment_over_available_funds_is_denied_and_stored(
+    client: TestClient,
+) -> None:
+    seed_account(client)
+
+    response = client.post(
+        "/servicing/requests",
+        json={
+            "request_id": "req_payment_insufficient",
+            "customer_id": "cust_service_001",
+            "account_id": "acct_service_001",
+            "operation": "request_payment",
+            "amount": "500.01",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["decision"] == "deny"
+    assert response.json()["reason"] == "insufficient_funds"
+
+    history = client.get("/servicing/requests/req_payment_insufficient")
+    assert history.json()["decision"] == "deny"
+    assert history.json()["reason"] == "insufficient_funds"
+
+
+def test_payment_over_limit_is_denied(client: TestClient) -> None:
+    seed_account(client)
+
+    response = client.post(
+        "/servicing/requests",
+        json={
+            "request_id": "req_payment_over_limit",
+            "customer_id": "cust_service_001",
+            "account_id": "acct_service_001",
+            "operation": "request_payment",
+            "amount": "10000.01",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["decision"] == "deny"
+    assert response.json()["reason"] == "payment_exceeds_limit"
+
+
+def test_account_view_with_amount_is_denied(client: TestClient) -> None:
+    seed_account(client)
+
+    response = client.post(
+        "/servicing/requests",
+        json={
+            "request_id": "req_view_with_amount",
+            "customer_id": "cust_service_001",
+            "account_id": "acct_service_001",
+            "operation": "view_account",
+            "amount": "10.00",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["decision"] == "deny"
+    assert response.json()["reason"] == "amount_not_allowed"
+
+
 def test_unknown_account_returns_404(client: TestClient) -> None:
     response = client.post(
         "/servicing/requests",

@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from decimal import Decimal
 from enum import Enum
 
 from backend.app.schemas.domain import (
@@ -7,6 +8,11 @@ from backend.app.schemas.domain import (
     ServicingOperation,
     ServicingRequest,
 )
+
+
+# Ceiling for a single payment request, independent of the account balance.
+# It guards against misheard or misparsed amounts. Applies to every currency.
+MAX_PAYMENT_REQUEST_AMOUNT = Decimal("10000.00")
 
 
 class PolicyDecision(str, Enum):
@@ -43,6 +49,12 @@ def authorize_request(
         )
 
     if request.operation == ServicingOperation.VIEW_ACCOUNT:
+        if request.amount is not None:
+            return PolicyResult(
+                PolicyDecision.DENY,
+                "amount_not_allowed",
+            )
+
         return PolicyResult(
             PolicyDecision.ALLOW,
             "policy_checks_passed",
@@ -53,6 +65,19 @@ def authorize_request(
             return PolicyResult(
                 PolicyDecision.DENY,
                 "payment_amount_required",
+            )
+
+        if request.amount > MAX_PAYMENT_REQUEST_AMOUNT:
+            return PolicyResult(
+                PolicyDecision.DENY,
+                "payment_exceeds_limit",
+            )
+
+        # Balance is the funds available in the account.
+        if request.amount > account.balance:
+            return PolicyResult(
+                PolicyDecision.DENY,
+                "insufficient_funds",
             )
 
         return PolicyResult(
