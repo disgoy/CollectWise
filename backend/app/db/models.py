@@ -3,7 +3,6 @@ from datetime import datetime, timezone
 
 from sqlalchemy import (
     CheckConstraint,
-    DateTime,
     ForeignKey,
     Numeric,
     String,
@@ -11,6 +10,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import Mapped, mapped_column
 from backend.app.db.base import Base
+from backend.app.db.types import UTCDateTime
 
 class CustomerRecord(Base):
     __tablename__ = "customers"
@@ -102,7 +102,7 @@ class ServicingRequestRecord(Base):
         default="evaluated",
     )
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
+        UTCDateTime(),
         default=lambda: datetime.now(timezone.utc),
         nullable=False,
     )
@@ -140,7 +140,7 @@ class ServicingAuditEvent(Base):
         nullable=True,
     )
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
+        UTCDateTime(),
         default=lambda: datetime.now(timezone.utc),
         nullable=False,
     )

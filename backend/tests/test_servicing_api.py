@@ -398,7 +398,8 @@ def test_servicing_request_history_returns_stored_record(
     assert history["decision"] == "allow"
     assert history["reason"] == "policy_checks_passed"
     assert history["status"] == "evaluated"
-    assert history["created_at"]
+    # An explicit UTC offset, so clients never have to guess the timezone.
+    assert history["created_at"].endswith(("Z", "+00:00"))
 
 
 def test_servicing_request_history_returns_404_for_unknown_request(

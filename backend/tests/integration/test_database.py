@@ -1,8 +1,9 @@
 
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
 import pytest
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, StatementError
 from sqlalchemy.orm import sessionmaker
 
 from backend.app.db import models
@@ -226,3 +227,66 @@ def test_audit_event_without_servicing_request_is_rejected(db_session):
         db_session.commit()
 
     db_session.rollback()
+
+def make_servicing_request(request_id: str, **fields) -> models.ServicingRequestRecord:
+    return models.ServicingRequestRecord(
+        request_id=request_id,
+        customer_id="cust_test_001",
+        account_id="acct_test_001",
+        operation="view_account",
+        amount=None,
+        decision="allow",
+        reason="policy_checks_passed",
+        **fields,
+    )
+
+
+def test_timestamps_are_read_back_as_aware_utc(db_session):
+    db_session.add(make_servicing_request("req_utc_001"))
+    db_session.commit()
+    # Force a real read from the database instead of the in-memory object.
+    db_session.expire_all()
+
+    saved = db_session.get(models.ServicingRequestRecord, "req_utc_001")
+
+    assert saved.created_at.tzinfo is not None
+    assert saved.created_at.utcoffset() == timedelta(0)
+
+
+def test_non_utc_timestamp_is_stored_as_the_same_instant(db_session):
+    india = timezone(timedelta(hours=5, minutes=30))
+    local_time = datetime(2026, 10, 29, 19, 20, tzinfo=india)
+    db_session.add(make_servicing_request("req_utc_002", created_at=local_time))
+    db_session.commit()
+    db_session.expire_all()
+
+    saved = db_session.get(models.ServicingRequestRecord, "req_utc_002")
+
+    assert saved.created_at == local_time
+    assert saved.created_at == datetime(2026, 10, 29, 13, 50, tzinfo=timezone.utc)
+
+
+def test_naive_timestamp_is_rejected(db_session):
+    db_session.add(
+        make_servicing_request("req_utc_003", created_at=datetime(2026, 10, 29, 19, 20))
+    )
+
+    with pytest.raises(StatementError):
+        db_session.commit()
+
+    db_session.rollback()
+
+
+def test_rows_written_without_offset_are_read_as_utc(db_session):
+    # Rows already in an existing collectwise.db were stored without an offset.
+    db_session.connection().exec_driver_sql(
+        "INSERT INTO servicing_requests "
+        "(request_id, customer_id, account_id, operation, decision, reason, status, created_at) "
+        "VALUES ('req_legacy_001', 'cust_test_001', 'acct_test_001', 'view_account', "
+        "'allow', 'policy_checks_passed', 'evaluated', '2026-10-24 13:05:46.000000')"
+    )
+    db_session.commit()
+
+    saved = db_session.get(models.ServicingRequestRecord, "req_legacy_001")
+
+    assert saved.created_at == datetime(2026, 10, 24, 13, 5, 46, tzinfo=timezone.utc)

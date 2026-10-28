@@ -52,6 +52,7 @@ def test_status_of_own_payment_request(ctx: ToolContext) -> None:
     assert result.data["decision"] == "allow"
     assert result.data["reason"] == "policy_checks_passed"
     assert result.data["status"] == "evaluated"
+    assert result.data["created_at"].endswith("+00:00")
     json.dumps(result.data)
 
 
