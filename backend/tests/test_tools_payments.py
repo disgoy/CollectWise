@@ -151,6 +151,45 @@ def test_confirm_rechecks_policy_when_funds_dropped(ctx: ToolContext) -> None:
     assert record.reason == "insufficient_funds"
 
 
+def test_repeated_confirm_after_a_denial_replays_the_denial(
+    ctx: ToolContext,
+) -> None:
+    propose(ctx, "400.00")
+    account = ctx.db.get(models.AccountRecord, "acct_a_1")
+    account.balance = Decimal("100.00")
+    ctx.db.commit()
+    ctx.state.start_caller_turn()
+
+    first = confirm(ctx)
+    second = confirm(ctx)
+
+    assert first == ToolResult.failure("insufficient_funds")
+    assert second == ToolResult.failure("insufficient_funds")
+    assert ctx.state.pending_payment.submitted is True
+    assert len(payment_records(ctx.db)) == 1
+
+
+def test_changed_proposal_must_be_heard_before_it_is_confirmed(
+    ctx: ToolContext,
+) -> None:
+    propose(ctx, "200.00")
+    ctx.state.start_caller_turn()  # "Yes... actually, make it 300."
+
+    propose(ctx, "300.00")
+    result = confirm(ctx)
+
+    # The caller has not heard 300 yet, so it cannot be confirmed this turn.
+    assert result == ToolResult.failure("confirmation_required")
+    assert payment_records(ctx.db) == []
+
+    ctx.state.start_caller_turn()  # "Yes, 300."
+    result = confirm(ctx)
+
+    assert result.data["amount"] == "300.00"
+    [record] = payment_records(ctx.db)
+    assert record.amount == Decimal("300.00")
+
+
 def test_new_proposal_replaces_the_pending_one(ctx: ToolContext) -> None:
     propose(ctx, "100.00")
     propose(ctx, "50.00")

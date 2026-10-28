@@ -1,8 +1,13 @@
 import os
+import tempfile
 
 # Must be set before the app is imported, so the app's own engine never
-# points at the real collectwise.db file during tests.
-os.environ["COLLECTWISE_DATABASE_URL"] = "sqlite://"
+# points at the real collectwise.db file during tests. Use a temporary file,
+# not in-memory "sqlite://": in-memory SQLite gets SingletonThreadPool, which
+# breaks when several TestClient startups run create_tables() from different
+# threads at once (as the concurrency test does).
+_test_db_dir = tempfile.mkdtemp(prefix="collectwise-tests-")
+os.environ["COLLECTWISE_DATABASE_URL"] = f"sqlite:///{_test_db_dir}/app.db"
 
 from collections.abc import Generator  # noqa: E402
 
