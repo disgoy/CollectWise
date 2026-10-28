@@ -32,7 +32,11 @@ def list_accounts(ctx: ToolContext, args: ListAccountsArgs) -> ToolResult:
 class GetAccountSummaryArgs(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    account_id: str = Field(min_length=1, max_length=50)
+    account_id: str = Field(
+        min_length=1,
+        max_length=50,
+        description="One of the caller's account IDs, as returned by list_accounts.",
+    )
 
 
 def get_account_summary(

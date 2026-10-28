@@ -37,8 +37,17 @@ def _payment_request(
 class ProposePaymentArgs(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    account_id: str = Field(min_length=1, max_length=50)
-    amount: Decimal = Field(gt=0, max_digits=12, decimal_places=2)
+    account_id: str = Field(
+        min_length=1,
+        max_length=50,
+        description="The caller's account to pay from, as returned by list_accounts.",
+    )
+    amount: Decimal = Field(
+        gt=0,
+        max_digits=12,
+        decimal_places=2,
+        description="Amount in the account's currency, at most 2 decimal places.",
+    )
 
 
 class ConfirmPaymentArgs(BaseModel):

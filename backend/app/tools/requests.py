@@ -10,7 +10,11 @@ from backend.app.tools.base import ToolContext, ToolResult, caller_facing_reason
 class GetRequestStatusArgs(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    request_id: str = Field(min_length=1, max_length=100)
+    request_id: str = Field(
+        min_length=1,
+        max_length=100,
+        description="A request ID seen earlier in this conversation, e.g. from confirm_payment.",
+    )
 
 
 def get_request_status(ctx: ToolContext, args: GetRequestStatusArgs) -> ToolResult:

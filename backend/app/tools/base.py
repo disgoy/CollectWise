@@ -92,5 +92,5 @@ class ToolResult:
         return cls(ok=True, data=data)
 
     @classmethod
-    def failure(cls, error: str) -> "ToolResult":
-        return cls(ok=False, error=error)
+    def failure(cls, error: str, **data: Any) -> "ToolResult":
+        return cls(ok=False, data=data, error=error)

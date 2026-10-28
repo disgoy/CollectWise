@@ -1,6 +1,6 @@
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from backend.app.tools.base import Handoff, ToolContext, ToolResult
 
@@ -17,7 +17,7 @@ class HandoffToHumanArgs(BaseModel):
         "out_of_scope",
         "unresolved_issue",
         "caller_distressed",
-    ]
+    ] = Field(description="Why the conversation is being handed to a human.")
 
 
 def handoff_to_human(ctx: ToolContext, args: HandoffToHumanArgs) -> ToolResult:
