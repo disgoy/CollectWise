@@ -4,7 +4,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from backend.app.services.accounts import list_customer_accounts, view_account
 from backend.app.services.servicing import AccountNotFoundError
-from backend.app.tools.base import ToolContext, ToolResult
+from backend.app.tools.base import ToolContext, ToolResult, caller_facing_reason
 
 
 class ListAccountsArgs(BaseModel):
@@ -55,11 +55,9 @@ def get_account_summary(
         return ToolResult.failure("account_not_found")
 
     if view.summary is None:
-        # Someone else's account looks exactly like a missing one, so the
-        # caller cannot probe which account IDs exist. The attempt is audited.
-        if view.decision.reason == "customer_account_mismatch":
-            return ToolResult.failure("account_not_found")
-        return ToolResult.failure(view.decision.reason)
+        # An attempt on someone else's account is audited but reported to the
+        # caller as account_not_found.
+        return ToolResult.failure(caller_facing_reason(view.decision.reason))
 
     summary = view.summary
     return ToolResult.success(

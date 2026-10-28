@@ -260,3 +260,22 @@ def get_servicing_request(
         status=record.status,
         created_at=record.created_at,
     )
+
+
+def get_customer_servicing_request(
+    db: Session,
+    customer_id: str,
+    request_id: str,
+) -> ServicingRequestHistory:
+    """Return a stored servicing request made by this customer.
+
+    A request belonging to another customer is reported exactly like a
+    missing one, so its existence is not revealed.
+    Raises ServicingRequestNotFoundError.
+    """
+    history = get_servicing_request(db, request_id)
+
+    if history.customer_id != customer_id:
+        raise ServicingRequestNotFoundError(request_id)
+
+    return history

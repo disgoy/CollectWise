@@ -13,6 +13,7 @@ from backend.app.services.servicing import (
     RequestIdConflictError,
     ServicingRequestNotFoundError,
     evaluate_servicing_request,
+    get_customer_servicing_request,
     get_servicing_request,
     preview_servicing_request,
 )
@@ -248,3 +249,22 @@ def test_preview_of_unknown_account_raises(db_session: Session) -> None:
             db_session,
             make_request(account_id="acct_missing_001"),
         )
+
+
+def test_customer_scoped_lookup_returns_own_request(db_session: Session) -> None:
+    seed_account(db_session)
+    evaluate_servicing_request(db_session, make_request())
+
+    history = get_customer_servicing_request(db_session, "cust_svc_001", "req_svc_001")
+
+    assert history.request_id == "req_svc_001"
+
+
+def test_customer_scoped_lookup_hides_other_customers_request(
+    db_session: Session,
+) -> None:
+    seed_account(db_session)
+    evaluate_servicing_request(db_session, make_request())
+
+    with pytest.raises(ServicingRequestNotFoundError):
+        get_customer_servicing_request(db_session, "cust_other_001", "req_svc_001")

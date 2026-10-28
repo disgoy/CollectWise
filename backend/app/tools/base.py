@@ -54,6 +54,17 @@ class ToolContext:
     state: ConversationState = field(default_factory=ConversationState)
 
 
+def caller_facing_reason(reason: str) -> str:
+    """Map a policy reason to what the caller may hear.
+
+    Someone else's account must look exactly like a missing one, so the
+    caller cannot probe which account IDs exist (D21).
+    """
+    if reason == "customer_account_mismatch":
+        return "account_not_found"
+    return reason
+
+
 @dataclass(frozen=True)
 class ToolResult:
     """Structured tool outcome handed back to the LLM.

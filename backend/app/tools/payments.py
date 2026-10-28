@@ -11,14 +11,12 @@ from backend.app.services.servicing import (
     evaluate_servicing_request,
     preview_servicing_request,
 )
-from backend.app.tools.base import PendingPayment, ToolContext, ToolResult
-
-
-def _caller_facing_reason(reason: str) -> str:
-    # Someone else's account looks exactly like a missing one (see D21).
-    if reason == "customer_account_mismatch":
-        return "account_not_found"
-    return reason
+from backend.app.tools.base import (
+    PendingPayment,
+    ToolContext,
+    ToolResult,
+    caller_facing_reason,
+)
 
 
 def _payment_request(
@@ -71,7 +69,7 @@ def propose_payment(ctx: ToolContext, args: ProposePaymentArgs) -> ToolResult:
         return ToolResult.failure("account_not_found")
 
     if preview.decision != PolicyDecision.ALLOW:
-        return ToolResult.failure(_caller_facing_reason(preview.reason))
+        return ToolResult.failure(caller_facing_reason(preview.reason))
 
     pending = PendingPayment(
         request_id=request.request_id,
@@ -119,7 +117,7 @@ def confirm_payment(ctx: ToolContext, args: ConfirmPaymentArgs) -> ToolResult:
     ctx.state.pending_payment = replace(pending, submitted=True)
 
     if decision.decision != PolicyDecision.ALLOW:
-        return ToolResult.failure(_caller_facing_reason(decision.reason))
+        return ToolResult.failure(caller_facing_reason(decision.reason))
 
     return ToolResult.success(
         request_id=pending.request_id,
