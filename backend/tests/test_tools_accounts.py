@@ -1,5 +1,4 @@
 import json
-from decimal import Decimal
 
 import pytest
 from pydantic import ValidationError
@@ -13,37 +12,8 @@ from backend.app.tools.accounts import (
     get_account_summary,
     list_accounts,
 )
-from backend.app.tools.base import CallerContext, ToolContext, ToolResult
-
-
-def seed_customer(
-    db: Session,
-    customer_id: str,
-    accounts: list[tuple[str, str, str]],
-) -> None:
-    """Seed a customer with (account_id, currency, status) accounts."""
-    db.add(models.CustomerRecord(customer_id=customer_id, display_name="Synthetic Customer"))
-    # No ORM relationship orders these inserts, so save the customer first.
-    db.flush()
-
-    for account_id, currency, status in accounts:
-        db.add(
-            models.AccountRecord(
-                account_id=account_id,
-                customer_id=customer_id,
-                balance=Decimal("500.00"),
-                currency=currency,
-                status=status,
-            )
-        )
-    db.commit()
-
-
-def context_for(db: Session, customer_id: str) -> ToolContext:
-    return ToolContext(
-        db=db,
-        caller=CallerContext(customer_id=customer_id, session_id="sess_test_001"),
-    )
+from backend.app.tools.base import ToolResult
+from backend.tests.helpers import context_for, seed_customer
 
 
 def test_tool_result_success_and_failure() -> None:

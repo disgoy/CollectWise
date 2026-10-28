@@ -1,4 +1,5 @@
 from dataclasses import dataclass, field
+from decimal import Decimal
 from typing import Any
 
 from sqlalchemy.orm import Session
@@ -17,9 +18,31 @@ class CallerContext:
     session_id: str
 
 
+@dataclass(frozen=True)
+class PendingPayment:
+    """A payment proposed to the caller, waiting for their confirmation."""
+
+    request_id: str
+    account_id: str
+    amount: Decimal
+    currency: str
+    # The caller turn in which the payment was proposed.
+    proposed_turn: int
+    submitted: bool = False
+
+
 @dataclass
 class ConversationState:
     """Mutable per-conversation state that tools read and update."""
+
+    # Number of caller utterances so far. Only the conversation manager
+    # advances it (start_caller_turn); tools only read it.
+    turn: int = 0
+    pending_payment: PendingPayment | None = None
+
+    def start_caller_turn(self) -> None:
+        """Record that the caller has spoken again."""
+        self.turn += 1
 
 
 @dataclass

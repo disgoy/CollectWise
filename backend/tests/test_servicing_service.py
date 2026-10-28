@@ -14,6 +14,7 @@ from backend.app.services.servicing import (
     ServicingRequestNotFoundError,
     evaluate_servicing_request,
     get_servicing_request,
+    preview_servicing_request,
 )
 
 
@@ -221,3 +222,29 @@ def test_get_servicing_request_returns_typed_history(db_session: Session) -> Non
 def test_get_unknown_servicing_request_raises(db_session: Session) -> None:
     with pytest.raises(ServicingRequestNotFoundError):
         get_servicing_request(db_session, "req_missing_001")
+
+
+def test_preview_runs_policy_without_persisting(db_session: Session) -> None:
+    seed_account(db_session)
+
+    preview = preview_servicing_request(
+        db_session,
+        make_request(
+            operation=ServicingOperation.REQUEST_PAYMENT,
+            amount=Decimal("600.00"),
+        ),
+    )
+
+    assert preview.decision == PolicyDecision.DENY
+    assert preview.reason == "insufficient_funds"
+    assert preview.currency == "USD"
+    assert db_session.get(models.ServicingRequestRecord, "req_svc_001") is None
+    assert audit_event_types(db_session, "req_svc_001") == []
+
+
+def test_preview_of_unknown_account_raises(db_session: Session) -> None:
+    with pytest.raises(AccountNotFoundError):
+        preview_servicing_request(
+            db_session,
+            make_request(account_id="acct_missing_001"),
+        )

@@ -47,6 +47,15 @@ class ServicingDecision:
 
 
 @dataclass(frozen=True)
+class ServicingPreview:
+    """Outcome of a policy check that was not persisted."""
+
+    decision: PolicyDecision
+    reason: str
+    currency: str
+
+
+@dataclass(frozen=True)
 class ServicingRequestHistory:
     request_id: str
     customer_id: str
@@ -97,6 +106,22 @@ def _replay_stored_request(
     return _stored_decision(stored, replayed=True)
 
 
+def _load_account(db: Session, account_id: str) -> Account:
+    """Load an account as a domain model. Raises AccountNotFoundError."""
+    account_record = db.get(AccountRecord, account_id)
+
+    if account_record is None:
+        raise AccountNotFoundError(account_id)
+
+    return Account(
+        account_id=account_record.account_id,
+        customer_id=account_record.customer_id,
+        balance=account_record.balance,
+        currency=account_record.currency,
+        status=AccountStatus(account_record.status),
+    )
+
+
 def _add_audit_event(
     db: Session,
     request_id: str,
@@ -128,18 +153,7 @@ def evaluate_servicing_request(
         return _replay_stored_request(stored, request)
 
     # 2. Load the account.
-    account_record = db.get(AccountRecord, request.account_id)
-
-    if account_record is None:
-        raise AccountNotFoundError(request.account_id)
-
-    account = Account(
-        account_id=account_record.account_id,
-        customer_id=account_record.customer_id,
-        balance=account_record.balance,
-        currency=account_record.currency,
-        status=AccountStatus(account_record.status),
-    )
+    account = _load_account(db, request.account_id)
 
     # 3. Evaluate the request using deterministic policy rules.
     result = authorize_request(request, account)
@@ -200,6 +214,26 @@ def evaluate_servicing_request(
 
     db.refresh(record)
     return _stored_decision(record, replayed=False)
+
+
+def preview_servicing_request(
+    db: Session,
+    request: ServicingRequest,
+) -> ServicingPreview:
+    """Run the policy for a request without persisting or auditing anything.
+
+    Used to check a request before asking the caller to confirm it. The real
+    decision is made later by evaluate_servicing_request, which runs the
+    policy again. Raises AccountNotFoundError.
+    """
+    account = _load_account(db, request.account_id)
+    result = authorize_request(request, account)
+
+    return ServicingPreview(
+        decision=result.decision,
+        reason=result.reason,
+        currency=account.currency,
+    )
 
 
 def get_servicing_request(
