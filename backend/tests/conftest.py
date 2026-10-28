@@ -50,3 +50,25 @@ def client() -> Generator[TestClient, None, None]:
     finally:
         app.dependency_overrides.clear()
         test_engine.dispose()
+
+
+@pytest.fixture
+def db_session() -> Generator[Session, None, None]:
+    # A separate in-memory database for tests that use the DB without HTTP.
+    test_engine = create_engine("sqlite:///:memory:")
+
+    @event.listens_for(test_engine, "connect")
+    def enable_foreign_keys(connection, _):
+        connection.execute("PRAGMA foreign_keys=ON")
+
+    Base.metadata.create_all(bind=test_engine)
+    TestSession = sessionmaker(
+        bind=test_engine,
+        autoflush=False,
+        expire_on_commit=False,
+    )
+
+    with TestSession() as session:
+        yield session
+
+    test_engine.dispose()

@@ -2,38 +2,10 @@
 from decimal import Decimal
 
 import pytest
-from sqlalchemy import create_engine
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import sessionmaker
 
-from backend.app.db.base import Base
 from backend.app.db import models
-
-
-@pytest.fixture
-def db_session():
-    # Use a separate in-memory database for each test.
-    test_engine = create_engine("sqlite:///:memory:")
-
-    # Enable SQLite foreign-key enforcement in this test database.
-    from sqlalchemy import event
-
-    @event.listens_for(test_engine, "connect")
-    def enable_foreign_keys(connection, _):
-        connection.execute("PRAGMA foreign_keys=ON")
-
-    Base.metadata.create_all(bind=test_engine)
-
-    TestSession = sessionmaker(
-        bind=test_engine,
-        autoflush=False,
-        expire_on_commit=False,
-    )
-
-    with TestSession() as session:
-        yield session
-
-    test_engine.dispose()
 
 
 def test_customer_can_be_saved_and_retrieved(db_session):
