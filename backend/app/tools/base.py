@@ -31,6 +31,15 @@ class PendingPayment:
     submitted: bool = False
 
 
+@dataclass(frozen=True)
+class Handoff:
+    """The conversation was handed to a human; the agent must stop acting."""
+
+    reason: str
+    # The caller turn in which the handoff happened.
+    turn: int
+
+
 @dataclass
 class ConversationState:
     """Mutable per-conversation state that tools read and update."""
@@ -39,6 +48,7 @@ class ConversationState:
     # advances it (start_caller_turn); tools only read it.
     turn: int = 0
     pending_payment: PendingPayment | None = None
+    handoff: Handoff | None = None
 
     def start_caller_turn(self) -> None:
         """Record that the caller has spoken again."""
