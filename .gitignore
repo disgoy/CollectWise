@@ -29,3 +29,7 @@ htmlcov/
 .DS_Store
 .vscode/
 .idea/
+
+# Local AI-assistant guidance and progress notes (kept private)
+CLAUDE.md
+docs/PROGRESS.md

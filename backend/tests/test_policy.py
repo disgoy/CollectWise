@@ -65,14 +65,58 @@ def test_denies_mismatched_account_id() -> None:
     assert result.reason == "account_id_mismatch"
 
 
-def test_denies_frozen_account() -> None:
+def test_allows_owner_to_view_frozen_account() -> None:
     result = authorize_request(
         make_request(),
         make_account(AccountStatus.FROZEN),
     )
 
+    assert result.decision == PolicyDecision.ALLOW
+
+
+def test_denies_payment_from_frozen_account() -> None:
+    result = authorize_request(
+        make_request(
+            operation=ServicingOperation.REQUEST_PAYMENT,
+            amount=Decimal("10.00"),
+        ),
+        make_account(AccountStatus.FROZEN),
+    )
+
     assert result.decision == PolicyDecision.DENY
     assert result.reason == "account_not_active"
+
+
+def test_denies_viewing_closed_account() -> None:
+    result = authorize_request(
+        make_request(),
+        make_account(AccountStatus.CLOSED),
+    )
+
+    assert result.decision == PolicyDecision.DENY
+    assert result.reason == "account_not_active"
+
+
+def test_denies_payment_from_closed_account() -> None:
+    result = authorize_request(
+        make_request(
+            operation=ServicingOperation.REQUEST_PAYMENT,
+            amount=Decimal("10.00"),
+        ),
+        make_account(AccountStatus.CLOSED),
+    )
+
+    assert result.decision == PolicyDecision.DENY
+    assert result.reason == "account_not_active"
+
+
+def test_non_owner_cannot_view_frozen_account() -> None:
+    result = authorize_request(
+        make_request(customer_id="cust_other_001"),
+        make_account(AccountStatus.FROZEN),
+    )
+
+    assert result.reason == "customer_account_mismatch"
 
 
 def test_denies_payment_without_amount() -> None:

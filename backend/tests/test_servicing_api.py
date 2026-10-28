@@ -75,7 +75,7 @@ def test_request_for_another_customer_is_denied(
     assert response.json()["reason"] == "customer_account_mismatch"
 
 
-def test_frozen_account_request_is_denied(
+def test_frozen_account_payment_is_denied(
     client: TestClient,
 ) -> None:
     seed_account(client, account_status="frozen")
@@ -86,13 +86,33 @@ def test_frozen_account_request_is_denied(
             "request_id": "req_frozen_001",
             "customer_id": "cust_service_001",
             "account_id": "acct_service_001",
-            "operation": "view_account",
+            "operation": "request_payment",
+            "amount": "10.00",
         },
     )
 
     assert response.status_code == 200
     assert response.json()["decision"] == "deny"
     assert response.json()["reason"] == "account_not_active"
+
+
+def test_frozen_account_view_is_allowed(
+    client: TestClient,
+) -> None:
+    seed_account(client, account_status="frozen")
+
+    response = client.post(
+        "/servicing/requests",
+        json={
+            "request_id": "req_frozen_view_001",
+            "customer_id": "cust_service_001",
+            "account_id": "acct_service_001",
+            "operation": "view_account",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["decision"] == "allow"
 
 
 def test_payment_without_amount_is_denied(

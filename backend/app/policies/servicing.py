@@ -42,7 +42,9 @@ def authorize_request(
             "account_id_mismatch",
         )
 
-    if account.status != AccountStatus.ACTIVE:
+    # Closed accounts allow nothing. Frozen accounts stay viewable by their
+    # owner but cannot move money (checked in the payment branch).
+    if account.status == AccountStatus.CLOSED:
         return PolicyResult(
             PolicyDecision.DENY,
             "account_not_active",
@@ -61,6 +63,12 @@ def authorize_request(
         )
 
     if request.operation == ServicingOperation.REQUEST_PAYMENT:
+        if account.status != AccountStatus.ACTIVE:
+            return PolicyResult(
+                PolicyDecision.DENY,
+                "account_not_active",
+            )
+
         if request.amount is None:
             return PolicyResult(
                 PolicyDecision.DENY,
