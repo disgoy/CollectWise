@@ -1,48 +1,11 @@
 import json
-from collections.abc import Generator
-import pytest
-from fastapi.testclient import TestClient
-from sqlalchemy import create_engine, event
-from sqlalchemy.orm import Session, sessionmaker
-from sqlalchemy.pool import StaticPool
 
-from backend.app.db import models
-from backend.app.db.base import Base
-from backend.app.db.session import get_db
-from backend.app.main import app
+from fastapi.testclient import TestClient
 from sqlalchemy import func, select
 
-@pytest.fixture
-def client() -> Generator[TestClient, None, None]:
-    test_engine = create_engine(
-        "sqlite://",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-    )
-
-    @event.listens_for(test_engine, "connect")
-    def enable_foreign_keys(connection, _):
-        connection.execute("PRAGMA foreign_keys=ON")
-
-    Base.metadata.create_all(bind=test_engine)
-    TestSession = sessionmaker(
-        bind=test_engine,
-        autoflush=False,
-        expire_on_commit=False,
-    )
-
-    def override_get_db() -> Generator[Session, None, None]:
-        with TestSession() as db:
-            yield db
-
-    app.dependency_overrides[get_db] = override_get_db
-
-    try:
-        with TestClient(app, raise_server_exceptions=False) as test_client:
-            yield test_client
-    finally:
-        app.dependency_overrides.clear()
-        test_engine.dispose()
+from backend.app.db import models
+from backend.app.db.session import get_db
+from backend.app.main import app
 
 
 def seed_account(
@@ -544,7 +507,11 @@ def test_audit_event_failure_rolls_back_servicing_request(
     finally:
         db_generator.close()
 
-    response = client.post(
+    # This test expects a server error, so return it as a 500 response
+    # instead of re-raising it. The DB override from the fixture still applies.
+    lenient_client = TestClient(app, raise_server_exceptions=False)
+
+    response = lenient_client.post(
         "/servicing/requests",
         json={
             "request_id": "req_audit_rollback_001",

@@ -3,25 +3,29 @@ from collections.abc import Generator
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import Session, sessionmaker
 
+from backend.app.config import DATABASE_URL
 from backend.app.db.base import Base
 
 
-DATABASE_URL = "sqlite:///./collectwise.db"
+IS_SQLITE = DATABASE_URL.startswith("sqlite")
 
 engine = create_engine(
     DATABASE_URL,
-    connect_args={"check_same_thread": False},
+    # SQLite connections are thread-bound by default; FastAPI uses a thread pool.
+    connect_args={"check_same_thread": False} if IS_SQLITE else {},
 )
 
 
-@event.listens_for(engine, "connect")
-def enable_sqlite_foreign_keys(
-    dbapi_connection: object,
-    connection_record: object,
-) -> None:
-    cursor = dbapi_connection.cursor()
-    cursor.execute("PRAGMA foreign_keys=ON")
-    cursor.close()
+if IS_SQLITE:
+
+    @event.listens_for(engine, "connect")
+    def enable_sqlite_foreign_keys(
+        dbapi_connection: object,
+        connection_record: object,
+    ) -> None:
+        cursor = dbapi_connection.cursor()
+        cursor.execute("PRAGMA foreign_keys=ON")
+        cursor.close()
 
 
 SessionLocal = sessionmaker(

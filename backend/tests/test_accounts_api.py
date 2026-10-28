@@ -1,49 +1,4 @@
-
-from collections.abc import Generator
-
-import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine, event
-from sqlalchemy.orm import Session, sessionmaker
-from sqlalchemy.pool import StaticPool
-
-from backend.app.db import models
-from backend.app.db.base import Base
-from backend.app.db.session import get_db
-from backend.app.main import app
-
-
-@pytest.fixture
-def client() -> Generator[TestClient, None, None]:
-    test_engine = create_engine(
-        "sqlite://",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-    )
-
-    @event.listens_for(test_engine, "connect")
-    def enable_foreign_keys(connection, _):
-        connection.execute("PRAGMA foreign_keys=ON")
-
-    Base.metadata.create_all(bind=test_engine)
-    TestSession = sessionmaker(
-        bind=test_engine,
-        autoflush=False,
-        expire_on_commit=False,
-    )
-
-    def override_get_db() -> Generator[Session, None, None]:
-        with TestSession() as db:
-            yield db
-
-    app.dependency_overrides[get_db] = override_get_db
-
-    try:
-        with TestClient(app) as test_client:
-            yield test_client
-    finally:
-        app.dependency_overrides.clear()
-        test_engine.dispose()
 
 
 def create_test_customer(client: TestClient) -> None:
