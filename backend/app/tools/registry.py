@@ -21,7 +21,12 @@ from backend.app.tools.payments import (
     confirm_payment,
     propose_payment,
 )
-from backend.app.tools.requests import GetRequestStatusArgs, get_request_status
+from backend.app.tools.requests import (
+    GetRequestStatusArgs,
+    ListRecentPaymentRequestsArgs,
+    get_request_status,
+    list_recent_payment_requests,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -92,6 +97,16 @@ _SPECS = [
         ),
         args_model=GetRequestStatusArgs,
         function=get_request_status,
+    ),
+    ToolSpec(
+        name="list_recent_payment_requests",
+        description=(
+            "List the caller's most recent payment requests, newest first, with "
+            "amount, currency, decision and time. Use it when the caller asks "
+            "about a payment without giving a request ID."
+        ),
+        args_model=ListRecentPaymentRequestsArgs,
+        function=list_recent_payment_requests,
     ),
     ToolSpec(
         name="handoff_to_human",

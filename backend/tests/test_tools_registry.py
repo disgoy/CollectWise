@@ -45,6 +45,7 @@ def test_registry_lists_every_tool() -> None:
         "confirm_payment",
         "cancel_payment",
         "get_request_status",
+        "list_recent_payment_requests",
         "handoff_to_human",
     }
 

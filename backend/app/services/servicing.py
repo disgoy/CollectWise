@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
 
+from sqlalchemy import and_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -44,6 +45,19 @@ class ServicingDecision:
     reason: str
     # True when this call was a retry and returned the stored decision.
     replayed: bool
+
+
+@dataclass(frozen=True)
+class PaymentRequestSummary:
+    request_id: str
+    account_id: str
+    amount: Decimal | None
+    # None when the account is not the customer's own (nothing is revealed).
+    currency: str | None
+    decision: PolicyDecision
+    reason: str
+    status: str
+    created_at: datetime
 
 
 @dataclass(frozen=True)
@@ -279,3 +293,48 @@ def get_customer_servicing_request(
         raise ServicingRequestNotFoundError(request_id)
 
     return history
+
+
+def list_customer_payment_requests(
+    db: Session,
+    customer_id: str,
+    limit: int,
+) -> list[PaymentRequestSummary]:
+    """Return the customer's most recent payment requests, newest first."""
+    if limit <= 0:
+        raise ValueError("limit must be positive")
+
+    rows = db.execute(
+        select(ServicingRequestRecord, AccountRecord.currency)
+        .outerjoin(
+            AccountRecord,
+            and_(
+                AccountRecord.account_id == ServicingRequestRecord.account_id,
+                # Only the customer's own accounts contribute a currency.
+                AccountRecord.customer_id == customer_id,
+            ),
+        )
+        .where(
+            ServicingRequestRecord.customer_id == customer_id,
+            ServicingRequestRecord.operation == ServicingOperation.REQUEST_PAYMENT.value,
+        )
+        .order_by(
+            ServicingRequestRecord.created_at.desc(),
+            ServicingRequestRecord.request_id.desc(),
+        )
+        .limit(limit)
+    )
+
+    return [
+        PaymentRequestSummary(
+            request_id=record.request_id,
+            account_id=record.account_id,
+            amount=record.amount,
+            currency=currency,
+            decision=PolicyDecision(record.decision),
+            reason=record.reason,
+            status=record.status,
+            created_at=record.created_at,
+        )
+        for record, currency in rows
+    ]

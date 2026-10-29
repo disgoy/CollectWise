@@ -15,6 +15,7 @@ from backend.app.services.servicing import (
     evaluate_servicing_request,
     get_customer_servicing_request,
     get_servicing_request,
+    list_customer_payment_requests,
     preview_servicing_request,
 )
 
@@ -268,3 +269,8 @@ def test_customer_scoped_lookup_hides_other_customers_request(
 
     with pytest.raises(ServicingRequestNotFoundError):
         get_customer_servicing_request(db_session, "cust_other_001", "req_svc_001")
+
+
+def test_listing_payment_requests_requires_a_positive_limit(db_session: Session) -> None:
+    with pytest.raises(ValueError):
+        list_customer_payment_requests(db_session, "cust_svc_001", 0)

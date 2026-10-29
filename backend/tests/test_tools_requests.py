@@ -1,4 +1,5 @@
 import json
+from datetime import datetime, timezone
 from decimal import Decimal
 
 import pytest
@@ -15,7 +16,12 @@ from backend.app.tools.payments import (
     confirm_payment,
     propose_payment,
 )
-from backend.app.tools.requests import GetRequestStatusArgs, get_request_status
+from backend.app.tools.requests import (
+    GetRequestStatusArgs,
+    ListRecentPaymentRequestsArgs,
+    get_request_status,
+    list_recent_payment_requests,
+)
 from backend.tests.helpers import context_for, seed_customer
 
 
@@ -109,3 +115,103 @@ def test_own_attempt_on_another_account_does_not_confirm_it_exists(
 def test_request_status_args_reject_invalid_input(bad_args: dict) -> None:
     with pytest.raises(ValidationError):
         GetRequestStatusArgs(**bad_args)
+
+
+def add_request(
+    db: Session,
+    request_id: str,
+    *,
+    customer_id: str = "cust_a",
+    account_id: str = "acct_a_1",
+    operation: str = "request_payment",
+    amount: str | None = "10.00",
+    decision: str = "allow",
+    reason: str = "policy_checks_passed",
+    minute: int = 0,
+) -> None:
+    """Insert a stored request directly, with a controlled creation time."""
+    db.add(
+        models.ServicingRequestRecord(
+            request_id=request_id,
+            customer_id=customer_id,
+            account_id=account_id,
+            operation=operation,
+            amount=None if amount is None else Decimal(amount),
+            decision=decision,
+            reason=reason,
+            created_at=datetime(2026, 10, 29, 10, minute, tzinfo=timezone.utc),
+        )
+    )
+    db.commit()
+
+
+def recent(ctx: ToolContext, **args) -> list[dict]:
+    result = list_recent_payment_requests(ctx, ListRecentPaymentRequestsArgs(**args))
+    assert result.ok is True
+    json.dumps(result.data)
+    return result.data["payment_requests"]
+
+
+def test_recent_payments_newest_first_with_currency(ctx: ToolContext) -> None:
+    add_request(ctx.db, "pay_old", amount="10.00", minute=1)
+    add_request(ctx.db, "pay_new", amount="20.00", minute=3)
+    add_request(ctx.db, "pay_mid", amount="15.00", minute=2)
+
+    payments = recent(ctx)
+
+    assert [p["request_id"] for p in payments] == ["pay_new", "pay_mid", "pay_old"]
+    assert payments[0] == {
+        "request_id": "pay_new",
+        "account_id": "acct_a_1",
+        "amount": "20.00",
+        "currency": "USD",
+        "decision": "allow",
+        "reason": "policy_checks_passed",
+        "status": "evaluated",
+        "created_at": "2026-10-29T10:03:00+00:00",
+    }
+
+
+def test_recent_payments_respects_the_limit(ctx: ToolContext) -> None:
+    for minute in range(6):
+        add_request(ctx.db, f"pay_{minute}", minute=minute)
+
+    assert len(recent(ctx)) == 3
+    assert [p["request_id"] for p in recent(ctx, limit=2)] == ["pay_5", "pay_4"]
+
+
+def test_recent_payments_exclude_views_and_other_customers(ctx: ToolContext) -> None:
+    add_request(ctx.db, "view_1", operation="view_account", amount=None, minute=5)
+    add_request(ctx.db, "pay_b", customer_id="cust_b", account_id="acct_b_1", minute=4)
+    add_request(ctx.db, "pay_a", minute=1)
+
+    assert [p["request_id"] for p in recent(ctx)] == ["pay_a"]
+
+
+def test_recent_payments_reveal_nothing_about_other_accounts(ctx: ToolContext) -> None:
+    # An old mismatched request by cust_a against cust_b's account.
+    add_request(
+        ctx.db,
+        "pay_mismatch",
+        account_id="acct_b_1",
+        decision="deny",
+        reason="customer_account_mismatch",
+    )
+
+    [payment] = recent(ctx)
+
+    assert payment["currency"] is None
+    assert payment["reason"] == "account_not_found"
+
+
+def test_recent_payments_empty(ctx: ToolContext) -> None:
+    assert recent(ctx) == []
+
+
+@pytest.mark.parametrize(
+    "bad_args",
+    [{"limit": 0}, {"limit": 6}, {"limit": 3, "customer_id": "cust_b"}],
+)
+def test_recent_payments_args_reject_invalid_input(bad_args: dict) -> None:
+    with pytest.raises(ValidationError):
+        ListRecentPaymentRequestsArgs(**bad_args)
