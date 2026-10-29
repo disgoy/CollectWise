@@ -164,11 +164,15 @@ def test_scripted_conversation_through_the_dispatcher(ctx: ToolContext) -> None:
     confirmation = call("confirm_payment")
     assert confirmation.data["status"] == "recorded"
 
-    # Turn 3: "Did that go through?"
+    # Turn 3: "Did that go through?" No request ID was ever shown (D55),
+    # so the agent finds it among recent payments.
     ctx.state.start_caller_turn()
-    status = call("get_request_status", {"request_id": confirmation.data["request_id"]})
-    assert status.data["decision"] == "allow"
-    assert status.data["amount"] == "200.00"
+    [payment] = call("list_recent_payment_requests").data["payment_requests"]
+    assert payment["decision"] == "allow"
+    assert payment["amount"] == "200.00"
+    # Nothing the model saw carries the request ID.
+    request_id = ctx.state.pending_payment.request_id
+    assert request_id not in json.dumps([confirmation.data, payment])
 
     # Turn 4: "Let me talk to a person."
     ctx.state.start_caller_turn()

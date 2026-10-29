@@ -37,12 +37,15 @@ def status_of(ctx: ToolContext, request_id: str) -> ToolResult:
 
 
 def record_payment(ctx: ToolContext, amount: str) -> str:
+    """Propose and confirm a payment; returns its ID, as the caller's app
+    would show it. The tools themselves never return it (D55)."""
     propose_payment(
         ctx,
         ProposePaymentArgs(account_id="acct_a_1", amount=Decimal(amount)),
     )
     ctx.state.start_caller_turn()
-    return confirm_payment(ctx, ConfirmPaymentArgs()).data["request_id"]
+    assert confirm_payment(ctx, ConfirmPaymentArgs()).ok
+    return ctx.state.pending_payment.request_id
 
 
 def test_status_of_own_payment_request(ctx: ToolContext) -> None:
@@ -51,7 +54,8 @@ def test_status_of_own_payment_request(ctx: ToolContext) -> None:
     result = status_of(ctx, request_id)
 
     assert result.ok is True
-    assert result.data["request_id"] == request_id
+    assert "request_id" not in result.data
+    assert request_id not in json.dumps(result.data)
     assert result.data["account_id"] == "acct_a_1"
     assert result.data["operation"] == "request_payment"
     assert result.data["amount"] == "200.00"
@@ -79,7 +83,8 @@ def test_other_customers_request_looks_missing(ctx: ToolContext) -> None:
         ProposePaymentArgs(account_id="acct_b_1", amount=Decimal("50.00")),
     )
     other.state.start_caller_turn()
-    other_request_id = confirm_payment(other, ConfirmPaymentArgs()).data["request_id"]
+    assert confirm_payment(other, ConfirmPaymentArgs()).ok
+    other_request_id = other.state.pending_payment.request_id
 
     result = status_of(ctx, other_request_id)
 
@@ -159,9 +164,8 @@ def test_recent_payments_newest_first_with_currency(ctx: ToolContext) -> None:
 
     payments = recent(ctx)
 
-    assert [p["request_id"] for p in payments] == ["pay_new", "pay_mid", "pay_old"]
+    assert [p["amount"] for p in payments] == ["20.00", "15.00", "10.00"]
     assert payments[0] == {
-        "request_id": "pay_new",
         "account_id": "acct_a_1",
         "amount": "20.00",
         "currency": "USD",
@@ -174,18 +178,18 @@ def test_recent_payments_newest_first_with_currency(ctx: ToolContext) -> None:
 
 def test_recent_payments_respects_the_limit(ctx: ToolContext) -> None:
     for minute in range(6):
-        add_request(ctx.db, f"pay_{minute}", minute=minute)
+        add_request(ctx.db, f"pay_{minute}", amount=f"{minute + 1}.00", minute=minute)
 
     assert len(recent(ctx)) == 3
-    assert [p["request_id"] for p in recent(ctx, limit=2)] == ["pay_5", "pay_4"]
+    assert [p["amount"] for p in recent(ctx, limit=2)] == ["6.00", "5.00"]
 
 
 def test_recent_payments_exclude_views_and_other_customers(ctx: ToolContext) -> None:
     add_request(ctx.db, "view_1", operation="view_account", amount=None, minute=5)
     add_request(ctx.db, "pay_b", customer_id="cust_b", account_id="acct_b_1", minute=4)
-    add_request(ctx.db, "pay_a", minute=1)
+    add_request(ctx.db, "pay_a", amount="7.00", minute=1)
 
-    assert [p["request_id"] for p in recent(ctx)] == ["pay_a"]
+    assert [p["amount"] for p in recent(ctx)] == ["7.00"]
 
 
 def test_recent_payments_reveal_nothing_about_other_accounts(ctx: ToolContext) -> None:
@@ -202,6 +206,15 @@ def test_recent_payments_reveal_nothing_about_other_accounts(ctx: ToolContext) -
 
     assert payment["currency"] is None
     assert payment["reason"] == "account_not_found"
+
+
+def test_recent_payments_never_carry_request_ids(ctx: ToolContext) -> None:
+    request_id = record_payment(ctx, "25.00")
+
+    [payment] = recent(ctx)
+
+    assert "request_id" not in payment
+    assert request_id not in json.dumps(payment)
 
 
 def test_recent_payments_empty(ctx: ToolContext) -> None:

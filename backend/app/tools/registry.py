@@ -92,8 +92,9 @@ _SPECS = [
     ToolSpec(
         name="get_request_status",
         description=(
-            "Look up the outcome of one of the caller's servicing requests by its "
-            "request ID, for example one returned by confirm_payment earlier."
+            "Look up the outcome of one of the caller's servicing requests by a "
+            "request ID the caller gives you, for example from the CollectWise app. "
+            "For payments made in this conversation, use list_recent_payment_requests."
         ),
         args_model=GetRequestStatusArgs,
         function=get_request_status,
@@ -103,7 +104,7 @@ _SPECS = [
         description=(
             "List the caller's most recent payment requests, newest first, with "
             "amount, currency, decision and time. Use it when the caller asks "
-            "about a payment without giving a request ID."
+            "what happened to a payment."
         ),
         args_model=ListRecentPaymentRequestsArgs,
         function=list_recent_payment_requests,

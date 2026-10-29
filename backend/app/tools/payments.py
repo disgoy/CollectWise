@@ -128,8 +128,8 @@ def confirm_payment(ctx: ToolContext, args: ConfirmPaymentArgs) -> ToolResult:
     if decision.decision != PolicyDecision.ALLOW:
         return ToolResult.failure(caller_facing_reason(decision.reason))
 
+    # No request ID: the model can't read out what it never sees (D55).
     return ToolResult.success(
-        request_id=pending.request_id,
         account_id=pending.account_id,
         amount=str(pending.amount),
         currency=pending.currency,

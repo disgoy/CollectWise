@@ -68,8 +68,11 @@ def test_propose_then_confirm_records_exactly_the_proposed_payment(
     assert result.data["replayed"] is False
     json.dumps(result.data)
 
+    # The model never sees the request ID, so it can't read it out (D55).
+    assert "request_id" not in result.data
+    assert "pay_" not in json.dumps(result.data)
+
     [record] = payment_records(ctx.db)
-    assert record.request_id == result.data["request_id"]
     assert record.customer_id == "cust_a"
     assert record.amount == Decimal("200.00")
     assert record.decision == "allow"
@@ -100,8 +103,7 @@ def test_repeated_confirm_replays_instead_of_duplicating(ctx: ToolContext) -> No
     first = confirm(ctx)
     second = confirm(ctx)
 
-    assert second.data["request_id"] == first.data["request_id"]
-    assert second.data["replayed"] is True
+    assert second.data == {**first.data, "replayed": True}
     assert len(payment_records(ctx.db)) == 1
 
 

@@ -14,7 +14,7 @@ class GetRequestStatusArgs(BaseModel):
     request_id: str = Field(
         min_length=1,
         max_length=100,
-        description="A request ID seen earlier in this conversation, e.g. from confirm_payment.",
+        description="A request ID the caller gave you, e.g. one shown in the CollectWise app.",
     )
 
 
@@ -29,8 +29,8 @@ def get_request_status(ctx: ToolContext, args: GetRequestStatusArgs) -> ToolResu
     except ServicingRequestNotFoundError:
         return ToolResult.failure("request_not_found")
 
+    # The caller supplied the ID; it isn't echoed back for the model to read out (D55).
     return ToolResult.success(
-        request_id=history.request_id,
         account_id=history.account_id,
         operation=history.operation.value,
         amount=None if history.amount is None else str(history.amount),
@@ -69,8 +69,8 @@ def list_recent_payment_requests(
 
     return ToolResult.success(
         payment_requests=[
+            # No request IDs (D55): the agent refers to payments by amount and time.
             {
-                "request_id": request.request_id,
                 "account_id": request.account_id,
                 "amount": None if request.amount is None else str(request.amount),
                 "currency": request.currency,
