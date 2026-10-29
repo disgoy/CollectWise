@@ -38,13 +38,21 @@ Then open http://127.0.0.1:8000/docs for the interactive API docs.
 python -m pytest -q
 ```
 
-Tests use their own in-memory databases and never touch `collectwise.db`.
+Tests use their own temporary databases and never touch `collectwise.db`.
 
 ## Configuration
 
 | Variable | Default | Purpose |
 |---|---|---|
 | `COLLECTWISE_DATABASE_URL` | `sqlite:///./collectwise.db` | Database connection URL |
+| `COLLECTWISE_SESSION_SECRET` | none (required for the agent API) | Signs caller session tokens; at least 32 characters |
+| `COLLECTWISE_AGENT_LLM` | unset (agent off) | Set to `anthropic` to enable real, paid model calls |
+| `COLLECTWISE_AGENT_MODEL` | `claude-sonnet-5-5` | Model used by the agent |
+| `COLLECTWISE_AGENT_EFFORT` | `medium` | Model effort level |
+| `ANTHROPIC_API_KEY` | none | Anthropic credentials |
+
+Local secrets go in a git-ignored `.env` (template: `.env.example`). The app
+does not read it itself; load it into your shell with `set -a; source .env; set +a`.
 
 ## API overview
 
