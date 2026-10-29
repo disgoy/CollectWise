@@ -224,3 +224,22 @@ def test_dev_token_helper_refuses_without_secret_or_args(monkeypatch, capsys) ->
     monkeypatch.setattr(config, "SESSION_TOKEN_SECRET", None)
     assert dev_token.main(["dev_token", "cust_a"]) == 1
     assert capsys.readouterr().out == ""
+
+
+def test_session_start_is_recorded(agent_client) -> None:
+    from sqlalchemy import select
+
+    from backend.app.db import models
+    from backend.app.db.session import get_db
+
+    session_id = new_session(agent_client)
+
+    db_generator = app.dependency_overrides[get_db]()
+    db = next(db_generator)
+    try:
+        [event] = db.scalars(select(models.ConversationEventRecord)).all()
+        assert (event.session_id, event.customer_id, event.turn, event.event_type) == (
+            session_id, "cust_a", 0, "session_started",
+        )
+    finally:
+        db_generator.close()

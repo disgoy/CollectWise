@@ -152,3 +152,70 @@ class ServicingAuditEvent(Base):
             name="ck_servicing_audit_events_type",
         ),
     )
+
+class ConversationEventRecord(Base):
+    """Agent conversation telemetry: metadata only, never message text or tool
+    arguments (D40). Deliberately separate from servicing_audit_events (D3)."""
+
+    __tablename__ = "conversation_events"
+
+    event_id: Mapped[int] = mapped_column(
+        primary_key=True,
+        autoincrement=True,
+    )
+    session_id: Mapped[str] = mapped_column(
+        String(64),
+        nullable=False,
+        index=True,
+    )
+    customer_id: Mapped[str] = mapped_column(
+        String(50),
+        nullable=False,
+        index=True,
+    )
+    turn: Mapped[int] = mapped_column(
+        nullable=False,
+    )
+    event_type: Mapped[str] = mapped_column(
+        String(30),
+        nullable=False,
+    )
+    # Tool name for tool_call events.
+    name: Mapped[str | None] = mapped_column(
+        String(50),
+        nullable=True,
+    )
+    # A code such as "ok", "insufficient_funds", "end_turn" or "reply".
+    outcome: Mapped[str | None] = mapped_column(
+        String(50),
+        nullable=True,
+    )
+    latency_ms: Mapped[int | None] = mapped_column(
+        nullable=True,
+    )
+    # JSON of counts only (e.g. token usage).
+    details: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        UTCDateTime(),
+        default=lambda: datetime.now(timezone.utc),
+        nullable=False,
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "event_type IN ('session_started', 'turn_started', "
+            "'model_call', 'tool_call', 'turn_completed')",
+            name="ck_conversation_events_type",
+        ),
+        CheckConstraint(
+            "turn >= 0",
+            name="ck_conversation_events_turn",
+        ),
+        CheckConstraint(
+            "latency_ms IS NULL OR latency_ms >= 0",
+            name="ck_conversation_events_latency",
+        ),
+    )

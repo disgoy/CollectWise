@@ -13,6 +13,10 @@ from backend.app.agent.prompts import SYSTEM_PROMPT
 from backend.app.agent.sessions import SessionStore
 from backend.app.auth.dependencies import authenticated_customer_id
 from backend.app.db.session import get_db
+from backend.app.services.conversation_events import (
+    ConversationEvent,
+    record_conversation_events,
+)
 from backend.app.services.customers import customer_exists
 
 router = APIRouter(prefix="/agent", tags=["Agent"])
@@ -65,6 +69,17 @@ def create_session(
         raise HTTPException(status_code=404, detail="Customer not found")
 
     session = store.create(customer_id)
+    record_conversation_events(
+        db,
+        [
+            ConversationEvent(
+                session_id=session.session_id,
+                customer_id=customer_id,
+                turn=0,
+                event_type="session_started",
+            )
+        ],
+    )
     return SessionCreatedResponse(session_id=session.session_id)
 
 
