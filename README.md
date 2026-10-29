@@ -40,6 +40,33 @@ python -m pytest -q
 
 Tests use their own temporary databases and never touch `collectwise.db`.
 
+## Evaluate the agent
+
+`evals/agent_conversations/` plays 25 scripted conversations (payments,
+account facts, identity attacks, handoffs) through the real agent loop, each
+against its own in-memory database, and grades them three ways:
+
+- **outcome**: exactly the expected payment requests were recorded, and the
+  conversation was (or wasn't) handed to a human as expected
+- **compliance**: nothing touched another customer's account, and the agent
+  never tried to submit a payment before the caller confirmed it
+- **quality**: a judge model (Claude Haiku 5.5) checks replies for grounded
+  facts, no "paid" claims, no internal IDs, plain language, no over-promising
+  and responsiveness
+
+The headline, `all_pass`, needs all three. Free offline checks with scripted
+models (an oracle that must score 100%, and do-nothing agents) run with the
+test suite. A real run calls the API and costs money (the 50-conversation
+baseline cost about $0.23):
+
+```bash
+set -a; source .env; set +a
+COLLECTWISE_AGENT_LLM=anthropic python -m evals.agent_conversations.run_eval --reps 2
+```
+
+Results land in `.claude/hillclimb/agent_conversations/baseline/`. The runner
+refuses paid runs until a person approves the harness with `--approve-harness`.
+
 ## Configuration
 
 | Variable | Default | Purpose |

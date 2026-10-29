@@ -33,3 +33,10 @@ htmlcov/
 # Local AI-assistant guidance and progress notes (kept private)
 CLAUDE.md
 docs/PROGRESS.md
+
+# Eval outputs: transcripts, rebuilt reports and archived pilots stay local
+.claude/hillclimb/**/traces/
+.claude/hillclimb/**/report.html
+.claude/hillclimb/**/state.json
+.claude/hillclimb/**/trajectory/
+.claude/hillclimb/archive/

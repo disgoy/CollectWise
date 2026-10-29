@@ -1,0 +1,75 @@
+{
+  "metrics": [
+    {
+      "id": "all_pass",
+      "label": "All pass",
+      "kind": "binary"
+    },
+    {
+      "id": "outcome",
+      "label": "Outcome",
+      "kind": "binary"
+    },
+    {
+      "id": "compliance",
+      "label": "Compliance",
+      "kind": "binary"
+    },
+    {
+      "id": "quality",
+      "label": "Reply quality",
+      "kind": "binary"
+    },
+    {
+      "id": "payments",
+      "label": "Payments",
+      "kind": "binary"
+    },
+    {
+      "id": "handoff",
+      "label": "Handoff",
+      "kind": "binary"
+    }
+  ],
+  "perf_fields": [
+    {
+      "id": "cost_usd",
+      "label": "Cost",
+      "unit": "$"
+    },
+    {
+      "id": "latency_s",
+      "label": "s per turn",
+      "unit": "s"
+    },
+    {
+      "id": "turn_max_s",
+      "label": "Slowest turn",
+      "unit": "s"
+    },
+    {
+      "id": "tool_calls",
+      "label": "Tool calls"
+    },
+    {
+      "id": "refusals",
+      "label": "Refusals"
+    }
+  ],
+  "prices": {
+    "claude-sonnet-5-5": {
+      "in": 2.0,
+      "out": 10.0
+    },
+    "claude-haiku-5-5": {
+      "in": 0.1,
+      "out": 0.5
+    }
+  },
+  "harness_paths": [
+    "evals/agent_conversations/grading.py",
+    "evals/agent_conversations/cases.json",
+    "requirements.txt"
+  ],
+  "harness_sha": "5918efe793a4fa75f23d3f6cd24b45ef294bc7b2a3eeb36b1563bffcb574e19f"
+}
