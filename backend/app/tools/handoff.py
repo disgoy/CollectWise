@@ -5,11 +5,11 @@ from pydantic import BaseModel, ConfigDict, Field
 from backend.app.tools.base import Handoff, ToolContext, ToolResult
 
 
+# A fixed reason code only. No free-text summary: the LLM could copy the
+# caller's words or account details into it, or carry a prompt injection to the
+# human agent. (A comment, not a docstring: Pydantic sends docstrings to the
+# model as the schema description.)
 class HandoffToHumanArgs(BaseModel):
-    """A fixed reason code only. No free-text summary: the LLM could copy the
-    caller's words or account details into it, or carry a prompt injection to
-    the human agent."""
-
     model_config = ConfigDict(extra="forbid")
 
     reason: Literal[

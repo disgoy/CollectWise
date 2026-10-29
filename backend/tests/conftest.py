@@ -8,6 +8,10 @@ import tempfile
 # threads at once (as the concurrency test does).
 _test_db_dir = tempfile.mkdtemp(prefix="collectwise-tests-")
 os.environ["COLLECTWISE_DATABASE_URL"] = f"sqlite:///{_test_db_dir}/app.db"
+# Tests use their own session-token secret, never the developer's real one.
+os.environ["COLLECTWISE_SESSION_SECRET"] = "test-only-session-secret-0123456789abcdef"
+# Tests must never reach the real model API, whatever the developer's shell has.
+os.environ.pop("COLLECTWISE_AGENT_LLM", None)
 
 from collections.abc import Generator  # noqa: E402
 

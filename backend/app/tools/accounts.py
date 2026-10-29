@@ -7,9 +7,8 @@ from backend.app.services.servicing import AccountNotFoundError
 from backend.app.tools.base import ToolContext, ToolResult, caller_facing_reason
 
 
+# No arguments: the caller comes from the context.
 class ListAccountsArgs(BaseModel):
-    """list_accounts takes no arguments; the caller comes from the context."""
-
     model_config = ConfigDict(extra="forbid")
 
 
