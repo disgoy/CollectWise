@@ -12,6 +12,8 @@ a servicing request is evaluated and recorded, never executed.
 - Idempotent servicing requests: a retry with the same `request_id` returns
   the stored decision; the same ID with different details returns 409
 - Audit trail saved in the same transaction as each decision
+- Back-office routes (`/customers`, `/accounts`, `/servicing`) need an admin
+  key; callers reach the agent routes with a signed session token
 - SQLite database via SQLAlchemy
 
 ## Setup
@@ -73,6 +75,7 @@ refuses paid runs until a person approves the harness with `--approve-harness`.
 |---|---|---|
 | `COLLECTWISE_DATABASE_URL` | `sqlite:///./collectwise.db` | Database connection URL |
 | `COLLECTWISE_SESSION_SECRET` | none (required for the agent API) | Signs caller session tokens; at least 32 characters |
+| `COLLECTWISE_ADMIN_KEY` | none (back-office API refuses every request) | Key for the back-office routes, sent as the `X-Admin-Key` header; at least 32 characters |
 | `COLLECTWISE_AGENT_LLM` | unset (agent off) | Set to `anthropic` to enable real, paid model calls |
 | `COLLECTWISE_AGENT_MODEL` | `claude-sonnet-5-5` | Model used by the agent |
 | `COLLECTWISE_AGENT_EFFORT` | `medium` | Model effort level |
@@ -90,6 +93,13 @@ Local secrets go in a git-ignored `.env` (template: `.env.example`). The app
 does not read it itself; load it into your shell with `set -a; source .env; set +a`.
 
 ## API overview
+
+There are two kinds of route. **Back-office** routes (customers, accounts,
+servicing) are for operators and setup: they need the `X-Admin-Key` header
+and answer 503 if no key is configured. **Agent** routes are for callers: they
+need `Authorization: Bearer <session token>`, and the caller's identity comes
+only from that token. Only `/health` is open. Plan for deployment: only the
+agent routes and `/health` should be reachable from the internet.
 
 | Method | Path | Purpose |
 |---|---|---|

@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
+from backend.app.auth.dependencies import require_admin
 from backend.app.db.session import get_db
 from backend.app.schemas.domain import ServicingRequest
 from backend.app.schemas.servicing import (
@@ -14,7 +15,8 @@ from backend.app.services.servicing import (
     ServicingRequestNotFoundError,
 )
 
-router = APIRouter(prefix="/servicing", tags=["Servicing"])
+# Back-office routes: every one needs the admin key (D70).
+router = APIRouter(prefix="/servicing", tags=["Servicing"], dependencies=[Depends(require_admin)])
 
 
 @router.post(

@@ -6,6 +6,7 @@ from sqlalchemy import func, select
 from backend.app.db import models
 from backend.app.db.session import get_db
 from backend.app.main import app
+from backend.tests.helpers import ADMIN_HEADERS
 
 
 def seed_account(
@@ -593,7 +594,7 @@ def test_audit_event_failure_rolls_back_servicing_request(
 
     # This test expects a server error, so return it as a 500 response
     # instead of re-raising it. The DB override from the fixture still applies.
-    lenient_client = TestClient(app, raise_server_exceptions=False)
+    lenient_client = TestClient(app, raise_server_exceptions=False, headers=ADMIN_HEADERS)
 
     response = lenient_client.post(
         "/servicing/requests",

@@ -2,8 +2,13 @@ from decimal import Decimal
 
 from sqlalchemy.orm import Session
 
+from backend.app import config
+from backend.app.auth.dependencies import ADMIN_KEY_HEADER
 from backend.app.db import models
 from backend.app.tools.base import CallerContext, ToolContext
+
+# The back-office key from conftest's environment (D70).
+ADMIN_HEADERS = {ADMIN_KEY_HEADER: config.ADMIN_API_KEY}
 
 
 def seed_customer(

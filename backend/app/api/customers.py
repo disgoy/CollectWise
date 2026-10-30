@@ -3,13 +3,15 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from backend.app.auth.dependencies import require_admin
 from backend.app.db.models import CustomerRecord
 from backend.app.db.session import get_db
 from backend.app.schemas.customer import CustomerCreate, CustomerResponse
 from backend.app.schemas.account import AccountResponse
 from backend.app.services.accounts import AccountDetails, list_customer_account_details
 
-router = APIRouter(prefix="/customers", tags=["Customers"])
+# Back-office routes: every one needs the admin key (D70).
+router = APIRouter(prefix="/customers", tags=["Customers"], dependencies=[Depends(require_admin)])
 
 
 @router.post(

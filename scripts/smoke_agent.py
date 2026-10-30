@@ -23,12 +23,15 @@ if os.environ.get("COLLECTWISE_AGENT_LLM") != "anthropic":
 _db_dir = tempfile.mkdtemp(prefix="collectwise-smoke-")
 os.environ["COLLECTWISE_DATABASE_URL"] = f"sqlite:///{_db_dir}/smoke.db"
 os.environ.setdefault("COLLECTWISE_SESSION_SECRET", secrets.token_urlsafe(32))
+# The script seeds its data through the back-office API (D70).
+os.environ.setdefault("COLLECTWISE_ADMIN_KEY", secrets.token_urlsafe(32))
 
 from fastapi.testclient import TestClient  # noqa: E402
 from sqlalchemy import select  # noqa: E402
 
 from backend.app import config  # noqa: E402
 from backend.app.api.agent import get_session_store  # noqa: E402
+from backend.app.auth.dependencies import ADMIN_KEY_HEADER  # noqa: E402
 from backend.app.auth.session_tokens import issue_session_token  # noqa: E402
 from backend.app.db import models  # noqa: E402
 from backend.app.db.session import SessionLocal  # noqa: E402
@@ -99,17 +102,21 @@ def main() -> int:
 
     print(f"Model: {config.AGENT_MODEL} | effort: {config.AGENT_EFFORT} | DB: {_db_dir}")
 
-    with TestClient(app) as client:
+    with TestClient(app, headers={ADMIN_KEY_HEADER: config.ADMIN_API_KEY}) as client:
+        # raise_for_status: a seeding failure (say, a bad admin key) must stop
+        # the script before it spends anything.
         for customer_id in (CUSTOMER, OTHER_CUSTOMER):
-            client.post("/customers", json={"customer_id": customer_id, "display_name": "Synthetic Customer"})
+            client.post(
+                "/customers", json={"customer_id": customer_id, "display_name": "Synthetic Customer"}
+            ).raise_for_status()
         client.post("/accounts", json={
             "account_id": "acct_smoke_a1", "customer_id": CUSTOMER,
             "balance": "500.00", "currency": "USD", "label": "main",
-        })
+        }).raise_for_status()
         client.post("/accounts", json={
             "account_id": "acct_smoke_b1", "customer_id": OTHER_CUSTOMER,
             "balance": "9000.00", "currency": "USD",
-        })
+        }).raise_for_status()
 
         token = issue_session_token(
             CUSTOMER,

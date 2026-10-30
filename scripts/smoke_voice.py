@@ -35,12 +35,15 @@ if not os.environ.get("DEEPGRAM_API_KEY"):
 _work_dir = Path(tempfile.mkdtemp(prefix="collectwise-voice-smoke-"))
 os.environ["COLLECTWISE_DATABASE_URL"] = f"sqlite:///{_work_dir}/smoke.db"
 os.environ.setdefault("COLLECTWISE_SESSION_SECRET", secrets.token_urlsafe(32))
+# The script seeds its data through the back-office API (D70).
+os.environ.setdefault("COLLECTWISE_ADMIN_KEY", secrets.token_urlsafe(32))
 
 from fastapi.testclient import TestClient  # noqa: E402
 from sqlalchemy import select  # noqa: E402
 
 from backend.app import config  # noqa: E402
 from backend.app.api.agent import get_tts  # noqa: E402
+from backend.app.auth.dependencies import ADMIN_KEY_HEADER  # noqa: E402
 from backend.app.auth.session_tokens import issue_session_token  # noqa: E402
 from backend.app.db import models  # noqa: E402
 from backend.app.db.session import SessionLocal  # noqa: E402
@@ -92,12 +95,16 @@ def main() -> int:
     caller_voice = get_tts()  # the same Deepgram adapter the app uses
     tts_chars = 0
 
-    with TestClient(app) as client:
-        client.post("/customers", json={"customer_id": CUSTOMER, "display_name": "Synthetic Customer"})
+    with TestClient(app, headers={ADMIN_KEY_HEADER: config.ADMIN_API_KEY}) as client:
+        # raise_for_status: a seeding failure (say, a bad admin key) must stop
+        # the script before it spends anything.
+        client.post(
+            "/customers", json={"customer_id": CUSTOMER, "display_name": "Synthetic Customer"}
+        ).raise_for_status()
         client.post("/accounts", json={
             "account_id": "acct_voice_a1", "customer_id": CUSTOMER,
             "balance": "500.00", "currency": "USD", "label": "main",
-        })
+        }).raise_for_status()
         token = issue_session_token(
             CUSTOMER, secret=config.SESSION_TOKEN_SECRET.encode("utf-8"), ttl_seconds=600,
         )

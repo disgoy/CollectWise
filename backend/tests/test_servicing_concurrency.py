@@ -12,6 +12,7 @@ from backend.app.db import models
 from backend.app.db.base import Base
 from backend.app.db.session import get_db
 from backend.app.main import app
+from backend.tests.helpers import ADMIN_HEADERS
 
 
 @pytest.fixture
@@ -43,7 +44,7 @@ def concurrency_client(
     app.dependency_overrides[get_db] = override_get_db
 
     try:
-        with TestClient(app, raise_server_exceptions=False) as client:
+        with TestClient(app, raise_server_exceptions=False, headers=ADMIN_HEADERS) as client:
             yield client
     finally:
         app.dependency_overrides.clear()
@@ -92,6 +93,7 @@ def test_concurrent_identical_requests_are_idempotent(
         with TestClient(
             app,
             raise_server_exceptions=False,
+            headers=ADMIN_HEADERS,
         ) as client:
             barrier.wait(timeout=5)
             response = client.post("/servicing/requests", json=payload)

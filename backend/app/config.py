@@ -11,6 +11,10 @@ DATABASE_URL = os.environ.get("COLLECTWISE_DATABASE_URL", DEFAULT_DATABASE_URL)
 SESSION_TOKEN_SECRET = os.environ.get("COLLECTWISE_SESSION_SECRET")
 SESSION_TOKEN_TTL_SECONDS = int(os.environ.get("COLLECTWISE_SESSION_TTL_SECONDS", "3600"))
 
+# Key for the back-office API: /customers, /accounts, /servicing (D70). No
+# default: unset means those routes refuse every request.
+ADMIN_API_KEY = os.environ.get("COLLECTWISE_ADMIN_KEY")
+
 # The agent's LLM. Off unless explicitly set to "anthropic", so nothing calls
 # the API by accident (tests never set it).
 AGENT_LLM = os.environ.get("COLLECTWISE_AGENT_LLM")
