@@ -17,3 +17,8 @@ AGENT_LLM = os.environ.get("COLLECTWISE_AGENT_LLM")
 AGENT_MODEL = os.environ.get("COLLECTWISE_AGENT_MODEL", "claude-sonnet-5-5")
 # Claude Sonnet 5.5 starting point for multi-step tool use; measure in evals.
 AGENT_EFFORT = os.environ.get("COLLECTWISE_AGENT_EFFORT", "medium")
+
+# Transcripts the speech service is less sure of than this get "say that
+# again" instead of reaching the agent (D60). A starting guess, to be tuned
+# with measured confidence values (4.7).
+VOICE_MIN_CONFIDENCE = float(os.environ.get("COLLECTWISE_VOICE_MIN_CONFIDENCE", "0.5"))

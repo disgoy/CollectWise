@@ -77,6 +77,7 @@ refuses paid runs until a person approves the harness with `--approve-harness`.
 | `COLLECTWISE_AGENT_MODEL` | `claude-sonnet-5-5` | Model used by the agent |
 | `COLLECTWISE_AGENT_EFFORT` | `medium` | Model effort level |
 | `ANTHROPIC_API_KEY` | none | Anthropic credentials |
+| `COLLECTWISE_VOICE_MIN_CONFIDENCE` | `0.5` | Voice turns heard with lower speech-to-text confidence get "say that again" instead of reaching the agent |
 
 Local secrets go in a git-ignored `.env` (template: `.env.example`). The app
 does not read it itself; load it into your shell with `set -a; source .env; set +a`.

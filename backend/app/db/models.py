@@ -2,7 +2,9 @@ from decimal import Decimal
 from datetime import datetime, timezone
 
 from sqlalchemy import (
+    Boolean,
     CheckConstraint,
+    Float,
     ForeignKey,
     Numeric,
     String,
@@ -217,5 +219,95 @@ class ConversationEventRecord(Base):
         CheckConstraint(
             "latency_ms IS NULL OR latency_ms >= 0",
             name="ck_conversation_events_latency",
+        ),
+    )
+
+
+class VoiceTurnMetricRecord(Base):
+    """One row per voice turn: stage timings and codes, never words (D40, D60).
+    A new table rather than new conversation_events types (D16)."""
+
+    __tablename__ = "voice_turn_metrics"
+
+    metric_id: Mapped[int] = mapped_column(
+        primary_key=True,
+        autoincrement=True,
+    )
+    session_id: Mapped[str] = mapped_column(
+        String(64),
+        nullable=False,
+        index=True,
+    )
+    customer_id: Mapped[str] = mapped_column(
+        String(50),
+        nullable=False,
+        index=True,
+    )
+    # The conversation's caller-turn count after this voice turn.
+    turn: Mapped[int] = mapped_column(
+        nullable=False,
+    )
+    outcome: Mapped[str] = mapped_column(
+        String(30),
+        nullable=False,
+    )
+    # False when speech synthesis failed and only text was returned.
+    audio_ok: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+    )
+    audio_in_ms: Mapped[int] = mapped_column(
+        nullable=False,
+    )
+    audio_out_ms: Mapped[int | None] = mapped_column(
+        nullable=True,
+    )
+    # Stage timings; None for stages that didn't run.
+    stt_ms: Mapped[int | None] = mapped_column(
+        nullable=True,
+    )
+    agent_ms: Mapped[int | None] = mapped_column(
+        nullable=True,
+    )
+    tts_ms: Mapped[int | None] = mapped_column(
+        nullable=True,
+    )
+    total_ms: Mapped[int] = mapped_column(
+        nullable=False,
+    )
+    confidence: Mapped[float | None] = mapped_column(
+        Float,
+        nullable=True,
+    )
+    transcript_chars: Mapped[int | None] = mapped_column(
+        nullable=True,
+    )
+    reply_chars: Mapped[int] = mapped_column(
+        nullable=False,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        UTCDateTime(),
+        default=lambda: datetime.now(timezone.utc),
+        nullable=False,
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "outcome IN ('reply', 'not_understood', 'too_long', "
+            "'stt_unavailable', 'already_handed_off')",
+            name="ck_voice_turn_metrics_outcome",
+        ),
+        CheckConstraint(
+            "turn >= 0 AND audio_in_ms >= 0 AND total_ms >= 0 AND reply_chars >= 0",
+            name="ck_voice_turn_metrics_nonnegative",
+        ),
+        CheckConstraint(
+            "(stt_ms IS NULL OR stt_ms >= 0) AND (agent_ms IS NULL OR agent_ms >= 0) "
+            "AND (tts_ms IS NULL OR tts_ms >= 0) AND (audio_out_ms IS NULL OR audio_out_ms >= 0)",
+            name="ck_voice_turn_metrics_stage_times",
+        ),
+        CheckConstraint(
+            "confidence IS NULL OR (confidence >= 0 AND confidence <= 1)",
+            name="ck_voice_turn_metrics_confidence",
         ),
     )
