@@ -74,6 +74,7 @@ def main(argv: list[str] | None = None) -> int:
     from backend.app.voice.audio import AudioFormatError, read_wav, write_wav
     from backend.app.voice.deepgram import REQUEST_OPTIONS, TTS_SAMPLE_RATE, DeepgramSTT, DeepgramTTS
     from backend.app.voice.speech import SpeechUnavailableError
+    from evals.costs import deepgram_stt_cost, deepgram_tts_cost
     from evals.voice_checks.noise import add_noise
     from evals.voice_checks.scoring import heard_fact, is_correct, summarize
 
@@ -177,8 +178,8 @@ def main(argv: list[str] | None = None) -> int:
         for error in errors:
             print(f"  {error}")
     audio_minutes = sum(r["audio_ms"] for r in rows) / 60_000
-    print(f"\nDeepgram use: {audio_minutes:.1f} min transcribed (~${audio_minutes * 0.0043:.3f}), "
-          f"{tts_chars} characters spoken (~${tts_chars / 1000 * 0.030:.3f}); from the free credit")
+    print(f"\nDeepgram use: {audio_minutes:.1f} min transcribed (~${deepgram_stt_cost(audio_minutes * 60):.3f}), "
+          f"{tts_chars} characters spoken (~${deepgram_tts_cost(tts_chars):.3f}); from the free credit")
     print(f"Listen to {out}/amount_*.wav (and caller/ for the test voices). Full results: {out}/results.json")
     return 0
 

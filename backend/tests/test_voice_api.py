@@ -8,7 +8,8 @@ from starlette.requests import Request
 
 from backend.app import config
 from backend.app.agent.sessions import SessionStore
-from backend.app.api.agent import _read_body_capped, get_llm, get_session_store, get_stt, get_tts
+from backend.app.api.providers import get_llm, get_session_store, get_stt, get_tts
+from backend.app.api.voice import _read_body_capped
 from backend.app.auth.session_tokens import issue_session_token
 from backend.app.main import app
 from backend.app.voice.audio import MAX_WAV_BYTES, AudioClip, read_wav, write_wav

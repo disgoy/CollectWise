@@ -14,7 +14,7 @@ from typing import Any
 
 import anthropic
 
-from backend.app.agent.claude import _is_transient
+from backend.app.agent.claude import is_transient_error
 
 JUDGE_MODEL = "claude-haiku-5-5"
 JUDGE_MAX_RETRIES = 4
@@ -249,7 +249,7 @@ def _call_judge(client: anthropic.Anthropic, prompt: str) -> Any:
             )
         except anthropic.APIError as exc:
             # Same split as the agent's client: only transient errors retry.
-            if not _is_transient(exc):
+            if not is_transient_error(exc):
                 raise JudgeError(f"judge request failed: {type(exc).__name__}") from exc
             if attempt == JUDGE_MAX_RETRIES:
                 raise JudgeError(f"judge unavailable: {type(exc).__name__}") from exc

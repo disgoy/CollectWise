@@ -7,7 +7,7 @@ from deepgram.errors import BadRequestError
 from fastapi import HTTPException
 
 from backend.app import config
-from backend.app.api import agent as agent_api
+from backend.app.api import providers
 from backend.app.voice.audio import AudioClip, read_wav
 from backend.app.voice.deepgram import (
     MAX_TTS_CHARS,
@@ -203,9 +203,9 @@ def test_tts_text_at_the_limit_is_spoken() -> None:
 
 @pytest.fixture
 def fresh_speech():
-    agent_api._deepgram_speech.cache_clear()
+    providers._deepgram_speech.cache_clear()
     yield
-    agent_api._deepgram_speech.cache_clear()
+    providers._deepgram_speech.cache_clear()
 
 
 def test_tests_never_have_speech_switched_on() -> None:
@@ -224,7 +224,7 @@ def test_speech_is_not_configured_without_switch_and_key(fresh_speech, monkeypat
     else:
         monkeypatch.setenv("DEEPGRAM_API_KEY", key)
 
-    for dependency in (agent_api.get_stt, agent_api.get_tts):
+    for dependency in (providers.get_stt, providers.get_tts):
         with pytest.raises(HTTPException) as caught:
             dependency()
         assert (caught.value.status_code, caught.value.detail) == (503, "Voice is not configured")
@@ -235,7 +235,7 @@ def test_switched_on_with_a_key_builds_both_adapters(fresh_speech, monkeypatch) 
     monkeypatch.setattr(config, "SPEECH_PROVIDER", "deepgram")
     monkeypatch.setenv("DEEPGRAM_API_KEY", "test-key-not-real")
 
-    stt, tts = agent_api.get_stt(), agent_api.get_tts()
+    stt, tts = providers.get_stt(), providers.get_tts()
 
     assert isinstance(stt, DeepgramSTT) and isinstance(tts, DeepgramTTS)
     assert stt._client is tts._client  # one SDK client for both

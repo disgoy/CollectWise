@@ -6,7 +6,8 @@ from fastapi.testclient import TestClient
 from backend.app import config
 from backend.app.agent.loop import REPLY_HANDED_OFF
 from backend.app.agent.sessions import SessionStore
-from backend.app.api.agent import get_llm, get_session_store
+from backend.app.api import providers
+from backend.app.api.providers import get_llm, get_session_store
 from backend.app.auth import dev_token
 from backend.app.auth.session_tokens import issue_session_token, verify_session_token
 from backend.app.main import app
@@ -243,3 +244,10 @@ def test_session_start_is_recorded(agent_client) -> None:
         )
     finally:
         db_generator.close()
+
+
+def test_one_session_store_serves_every_request() -> None:
+    # Tests override the store; the app's own must be shared, or every
+    # conversation would vanish after the request that created it.
+    assert isinstance(providers.get_session_store(), SessionStore)
+    assert providers.get_session_store() is providers.get_session_store()

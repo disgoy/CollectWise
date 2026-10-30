@@ -8,6 +8,7 @@ from backend.app.db.session import create_tables
 from backend.app.api.accounts import router as accounts_router
 from backend.app.api.servicing import router as servicing_router
 from backend.app.api.agent import router as agent_router
+from backend.app.api.voice import router as voice_router
 
 
 @asynccontextmanager
@@ -27,6 +28,7 @@ app.include_router(customers_router)
 app.include_router(accounts_router)
 app.include_router(servicing_router)
 app.include_router(agent_router)
+app.include_router(voice_router)
 
 
 @app.get("/health", tags=["Health"])

@@ -42,13 +42,14 @@ from fastapi.testclient import TestClient  # noqa: E402
 from sqlalchemy import select  # noqa: E402
 
 from backend.app import config  # noqa: E402
-from backend.app.api.agent import get_tts  # noqa: E402
+from backend.app.api.providers import get_tts  # noqa: E402
 from backend.app.auth.dependencies import ADMIN_KEY_HEADER  # noqa: E402
 from backend.app.auth.session_tokens import issue_session_token  # noqa: E402
 from backend.app.db import models  # noqa: E402
 from backend.app.db.session import SessionLocal  # noqa: E402
 from backend.app.main import app  # noqa: E402
 from backend.app.voice.audio import write_wav  # noqa: E402
+from evals.costs import UsageCollector, claude_cost, deepgram_stt_cost, deepgram_tts_cost  # noqa: E402
 
 CUSTOMER = "cust_voice_a"
 
@@ -58,29 +59,6 @@ CALLER_LINES = [
     "Yes, go ahead.",
     "Can I speak to a person, please?",
 ]
-
-# Published pay-as-you-go prices (deepgram.com/pricing, checked 2026-10-30)
-# and Claude Sonnet 5.5 prices, USD. Estimates only.
-DEEPGRAM_STT_PER_MIN = 0.0043  # Nova-3 monolingual, pre-recorded
-DEEPGRAM_TTS_PER_1K_CHARS = 0.030  # Aura-2
-CLAUDE = {"input": 2.00, "cache_write": 2.50, "cache_read": 0.20, "output": 10.00}  # per MTok
-
-
-class UsageCollector(logging.Handler):
-    """Collects the per-call usage the Claude client logs."""
-
-    def __init__(self) -> None:
-        super().__init__()
-        self.totals = {key: 0 for key in CLAUDE}
-
-    def emit(self, record: logging.LogRecord) -> None:
-        if record.msg.startswith("Claude call:"):
-            _, inp, cache_read, cache_write, out = record.args
-            self.totals["input"] += inp or 0
-            self.totals["cache_read"] += cache_read or 0
-            self.totals["cache_write"] += cache_write or 0
-            self.totals["output"] += out or 0
-
 
 def main() -> int:
     logging.basicConfig(level=logging.WARNING, format="%(levelname)s %(name)s: %(message)s")
@@ -154,14 +132,14 @@ def main() -> int:
     for record in records:
         print(f"  {record.operation:16} {record.account_id:14} amount={record.amount} {record.decision}/{record.reason}")
 
-    claude_cost = sum(usage.totals[key] * CLAUDE[key] for key in CLAUDE) / 1_000_000
-    stt_cost = stt_seconds / 60 * DEEPGRAM_STT_PER_MIN
-    tts_cost = tts_chars / 1000 * DEEPGRAM_TTS_PER_1K_CHARS
+    llm_cost = claude_cost(config.AGENT_MODEL, usage.totals)
+    stt_cost = deepgram_stt_cost(stt_seconds)
+    tts_cost = deepgram_tts_cost(tts_chars)
     print("\n--- Usage (estimates)")
-    print(f"  Claude tokens: {usage.totals} -> ~${claude_cost:.4f}")
+    print(f"  Claude tokens: {usage.totals} -> ~${llm_cost:.4f}")
     print(f"  Deepgram STT: {stt_seconds:.1f} s of audio -> ~${stt_cost:.4f}")
     print(f"  Deepgram TTS: {tts_chars} characters (caller lines + replies) -> ~${tts_cost:.4f}")
-    print(f"  Total: ~${claude_cost + stt_cost + tts_cost:.4f} (Deepgram part comes from the free credit)")
+    print(f"  Total: ~${llm_cost + stt_cost + tts_cost:.4f} (Deepgram part comes from the free credit)")
     print(f"\nListen to the turn*_reply.wav files in {_work_dir}")
     return 0
 

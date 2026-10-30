@@ -18,7 +18,7 @@ from backend.app.auth.dependencies import ADMIN_KEY_HEADER
 from backend.app.auth.session_tokens import issue_session_token
 from backend.app.db import models
 from backend.app.db.session import get_db
-from backend.app.api import accounts, agent, customers, servicing
+from backend.app.api import accounts, agent, customers, servicing, voice
 from backend.app.main import app
 
 BACK_OFFICE_PREFIXES = ("/customers", "/accounts", "/servicing")
@@ -111,7 +111,7 @@ def test_every_route_is_back_office_agent_or_health() -> None:
 
 
 def test_no_route_is_hidden_from_the_schema() -> None:
-    routes = [*app.routes, *(r for module in (accounts, agent, customers, servicing) for r in module.router.routes)]
+    routes = [*app.routes, *(r for module in (accounts, agent, customers, servicing, voice) for r in module.router.routes)]
     api_routes = [route for route in routes if isinstance(route, APIRoute)]
 
     assert len(api_routes) == len(OPERATIONS)

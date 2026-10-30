@@ -17,9 +17,10 @@ FALLBACK_BETA = "server-side-fallback-2026-07-01"
 DEFAULT_MAX_TOKENS = 16000
 
 
-def _is_transient(exc: anthropic.APIError) -> bool:
+def is_transient_error(exc: anthropic.APIError) -> bool:
     """Failures worth a friendly "try again" reply. Anything else (400, 401,
-    403, 404 ...) means our request or configuration is wrong and must raise."""
+    403, 404 ...) means our request or configuration is wrong and must raise.
+    Public: the eval's judge retries on the same errors."""
     if isinstance(exc, (anthropic.APIConnectionError, anthropic.RateLimitError)):
         return True  # includes APITimeoutError
     return isinstance(exc, anthropic.APIStatusError) and exc.status_code >= 500
@@ -82,7 +83,7 @@ class ClaudeClient:
             else:
                 response = self._client.messages.create(**params)
         except anthropic.APIError as exc:
-            if not _is_transient(exc):
+            if not is_transient_error(exc):
                 raise
             logger.warning("Claude API unavailable: %s", type(exc).__name__)
             raise LLMUnavailableError(type(exc).__name__) from exc

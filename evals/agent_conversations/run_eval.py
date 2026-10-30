@@ -56,20 +56,13 @@ from backend.app.services.accounts import create_account
 from backend.app.services.servicing import evaluate_servicing_request
 from evals.agent_conversations import grading
 from evals.agent_conversations.oracle import CONSTANT_REPLIES, ConstantLLM, oracle_llm
+from evals.costs import claude_cost
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 CASES_PATH = Path(__file__).with_name("cases.json")
 FLOW_DIR = REPO_ROOT / ".claude" / "hillclimb" / "agent_conversations"
 
 MAX_RETRIES = 4  # per model call, on transient API errors
-
-# USD per million tokens, for the printed summary only. Cache writes cost
-# 1.25x input, cache reads 0.1x.
-PRICES = {
-    "claude-sonnet-5-5": {"in": 2.00, "out": 10.00},
-    "claude-haiku-5-5": {"in": 0.10, "out": 0.50},
-}
-
 
 class HarnessError(Exception):
     """An attempt that produced nothing to score. Goes to errors.jsonl."""
@@ -426,16 +419,7 @@ def wilson(passed: float, n: int) -> tuple[float, float]:
 def cost_usd(model: str | None, usage: dict | None) -> float:
     if not model or not usage:
         return 0.0
-    price = next((p for name, p in PRICES.items() if model.startswith(name)), None)
-    if price is None:
-        raise ValueError(f"no price for model {model}")
-    per_token_in = price["in"] / 1_000_000
-    return (
-        usage["input_tokens"] * per_token_in
-        + usage["cache_creation_input_tokens"] * per_token_in * 1.25
-        + usage["cache_read_input_tokens"] * per_token_in * 0.1
-        + usage["output_tokens"] * price["out"] / 1_000_000
-    )
+    return claude_cost(model, usage)
 
 
 def summarise(rows: list[dict], errors: list[dict], cases: dict[str, dict], wall_s: float) -> str:

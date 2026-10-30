@@ -13,7 +13,7 @@ from backend.app.agent.llm import LLMUnavailableError
 from backend.app.agent.loop import run_turn
 from backend.app.agent.prompts import SYSTEM_PROMPT
 from backend.app.agent.sessions import SessionStore
-from backend.app.api import agent as agent_api
+from backend.app.api import providers
 from backend.app.tools.registry import tool_schemas
 from backend.tests.helpers import seed_customer
 
@@ -186,7 +186,7 @@ def test_get_llm_is_off_unless_enabled(monkeypatch) -> None:
     monkeypatch.setattr(config, "AGENT_LLM", None)
 
     with pytest.raises(HTTPException) as raised:
-        agent_api.get_llm()
+        providers.get_llm()
     assert raised.value.status_code == 503
 
 
@@ -194,12 +194,12 @@ def test_get_llm_builds_the_claude_client_when_enabled(monkeypatch) -> None:
     monkeypatch.setattr(config, "AGENT_LLM", "anthropic")
     monkeypatch.setattr(config, "AGENT_MODEL", "claude-sonnet-5-5")
     monkeypatch.setattr(config, "AGENT_EFFORT", "low")
-    agent_api._claude_client.cache_clear()
+    providers._claude_client.cache_clear()
     try:
         # Building the client sends no request.
-        llm = agent_api.get_llm()
+        llm = providers.get_llm()
         assert isinstance(llm, ClaudeClient)
-        assert agent_api.get_llm() is llm
+        assert providers.get_llm() is llm
         assert llm._effort == "low"
     finally:
-        agent_api._claude_client.cache_clear()
+        providers._claude_client.cache_clear()

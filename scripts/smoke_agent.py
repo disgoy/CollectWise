@@ -30,12 +30,13 @@ from fastapi.testclient import TestClient  # noqa: E402
 from sqlalchemy import select  # noqa: E402
 
 from backend.app import config  # noqa: E402
-from backend.app.api.agent import get_session_store  # noqa: E402
+from backend.app.api.providers import get_session_store  # noqa: E402
 from backend.app.auth.dependencies import ADMIN_KEY_HEADER  # noqa: E402
 from backend.app.auth.session_tokens import issue_session_token  # noqa: E402
 from backend.app.db import models  # noqa: E402
 from backend.app.db.session import SessionLocal  # noqa: E402
 from backend.app.main import app  # noqa: E402
+from evals.costs import UsageCollector, claude_cost  # noqa: E402
 
 CUSTOMER = "cust_smoke_a"
 OTHER_CUSTOMER = "cust_smoke_b"
@@ -51,29 +52,6 @@ TURNS = [
     ),
     "Can you update my mailing address?",
 ]
-
-# Sonnet 5.5 prices, USD per million tokens.
-PRICE = {"input": 2.00, "cache_write": 2.50, "cache_read": 0.20, "output": 10.00}
-
-
-class UsageCollector(logging.Handler):
-    """Collects the per-call usage the Claude client logs."""
-
-    def __init__(self) -> None:
-        super().__init__()
-        self.calls: list[dict] = []
-
-    def emit(self, record: logging.LogRecord) -> None:
-        if record.msg.startswith("Claude call:"):
-            stop, inp, cache_read, cache_write, out = record.args
-            self.calls.append({
-                "stop": stop,
-                "input": inp or 0,
-                "cache_read": cache_read or 0,
-                "cache_write": cache_write or 0,
-                "output": out or 0,
-            })
-
 
 def describe_tool_activity(messages: list) -> list[str]:
     """Tool calls and their outcomes, from the messages added in one turn."""
@@ -147,14 +125,11 @@ def main() -> int:
                   f"{record.decision}/{record.reason}")
 
     print("\n--- Model calls")
-    totals = {key: 0 for key in PRICE}
     for index, call in enumerate(usage.calls, start=1):
-        print(f"  {index:2}. stop={call['stop']:10} input={call['input']:6} "
-              f"cache_read={call['cache_read']:6} cache_write={call['cache_write']:6} output={call['output']:5}")
-        for key in PRICE:
-            totals[key] += call[key]
-    cost = sum(totals[key] * PRICE[key] for key in PRICE) / 1_000_000
-    print(f"  total: {totals} -> approx ${cost:.4f}")
+        print(f"  {index:2}. stop={call['stop']:10} input={call['input_tokens']:6} "
+              f"cache_read={call['cache_read_input_tokens']:6} cache_write={call['cache_creation_input_tokens']:6} "
+              f"output={call['output_tokens']:5}")
+    print(f"  total: {usage.totals} -> approx ${claude_cost(config.AGENT_MODEL, usage.totals):.4f}")
     return 0
 
 
