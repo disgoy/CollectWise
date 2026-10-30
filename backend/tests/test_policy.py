@@ -215,3 +215,34 @@ def test_inactive_account_is_reported_before_funds() -> None:
     )
 
     assert result.reason == "account_not_active"
+
+
+# --- the safety default ------------------------------------------------------
+
+
+def test_an_operation_without_rules_is_denied() -> None:
+    # Validation blocks unknown operations, so build one directly: this is
+    # what a new operation type would meet before anyone wrote its rules.
+    request = ServicingRequest.model_construct(
+        request_id="req_demo_001",
+        customer_id="cust_demo_001",
+        account_id="acct_demo_001",
+        operation="close_account",
+        amount=None,
+    )
+
+    result = authorize_request(request, make_account())
+
+    assert result.decision == PolicyDecision.DENY
+    assert result.reason == "unsupported_operation"
+
+
+def test_every_operation_has_rules_of_its_own() -> None:
+    # Fails when an operation is added to ServicingOperation without a branch
+    # in the policy: it would be denied as unsupported.
+    amounts = {ServicingOperation.REQUEST_PAYMENT: Decimal("10.00")}
+
+    for operation in ServicingOperation:
+        result = authorize_request(make_request(operation, amount=amounts.get(operation)), make_account())
+
+        assert result.reason != "unsupported_operation", f"{operation.value} has no policy rules"
