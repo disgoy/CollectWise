@@ -6,6 +6,7 @@ Everything is checked before any speech service sees (or bills for) the audio.
 """
 
 import io
+import struct
 import wave
 from dataclasses import dataclass
 
@@ -15,6 +16,12 @@ MAX_SAMPLE_RATE = 48_000  # browser audio
 MAX_DURATION_MS = 30_000  # one caller turn
 # 30 s at 48 kHz mono PCM16 is 2,880,000 bytes, plus the header.
 MAX_WAV_BYTES = 3 * 1024 * 1024
+
+
+WAVE_FORMAT_PCM = 0x0001
+WAVE_FORMAT_EXTENSIBLE = 0xFFFE
+# KSDATAFORMAT_SUBTYPE_PCM: the "extensible" header's way of saying plain PCM.
+PCM_SUBFORMAT = bytes.fromhex("0100000000001000800000aa00389b71")
 
 
 class AudioFormatError(ValueError):
@@ -48,12 +55,36 @@ class AudioClip:
         return self.samples * 1000 // self.sample_rate
 
 
+def _as_plain_pcm_header(raw: bytes) -> bytes:
+    """If the file uses the "extensible" WAV header (format 0xFFFE) for plain
+    PCM with full-width samples, return it relabelled as plain PCM, which is
+    the same audio (D68). Tools such as macOS afconvert write this variant;
+    Python 3.11's wave module refuses it. Anything else is returned unchanged
+    for read_wav to judge."""
+    pos = 12  # after "RIFF", size, "WAVE"
+    while pos + 8 <= len(raw):
+        chunk_id = raw[pos:pos + 4]
+        size = struct.unpack_from("<I", raw, pos + 4)[0]
+        if chunk_id == b"fmt ":
+            body = raw[pos + 8:pos + 8 + size]
+            if size < 40 or len(body) < 40:
+                return raw
+            tag, bits = struct.unpack_from("<H", body, 0)[0], struct.unpack_from("<H", body, 14)[0]
+            valid_bits = struct.unpack_from("<H", body, 18)[0]
+            if tag == WAVE_FORMAT_EXTENSIBLE and body[24:40] == PCM_SUBFORMAT and valid_bits == bits:
+                return raw[:pos + 8] + struct.pack("<H", WAVE_FORMAT_PCM) + raw[pos + 10:]
+            return raw
+        pos += 8 + size + (size & 1)
+    return raw
+
+
 def read_wav(raw: bytes, *, max_duration_ms: int = MAX_DURATION_MS) -> AudioClip:
     """Parse and check a WAV file. Raises AudioFormatError."""
     # Size first: nothing is parsed until we know it's small enough.
     if len(raw) > MAX_WAV_BYTES:
         raise AudioFormatError("too_large")
 
+    raw = _as_plain_pcm_header(raw)
     try:
         with wave.open(io.BytesIO(raw), "rb") as wav:
             channels = wav.getnchannels()
@@ -75,8 +106,9 @@ def read_wav(raw: bytes, *, max_duration_ms: int = MAX_DURATION_MS) -> AudioClip
 
             data = wav.readframes(declared_samples)
     except wave.Error as exc:
-        # The wave module only reads uncompressed PCM. Float, mu-law and the
-        # "extensible" header variant all arrive here as "unknown format".
+        # The wave module only reads uncompressed PCM. Float, mu-law and
+        # extensible headers for anything but plain PCM arrive here as
+        # "unknown format".
         if "unknown format" in str(exc):
             raise AudioFormatError("unsupported_encoding") from exc
         raise AudioFormatError("not_wav") from exc

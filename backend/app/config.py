@@ -19,9 +19,9 @@ AGENT_MODEL = os.environ.get("COLLECTWISE_AGENT_MODEL", "claude-sonnet-5-5")
 AGENT_EFFORT = os.environ.get("COLLECTWISE_AGENT_EFFORT", "medium")
 
 # Transcripts the speech service is less sure of than this get "say that
-# again" instead of reaching the agent (D60). A starting guess, to be tuned
-# with measured confidence values (4.7).
-VOICE_MIN_CONFIDENCE = float(os.environ.get("COLLECTWISE_VOICE_MIN_CONFIDENCE", "0.5"))
+# again" instead of reaching the agent (D60). 0.6 from the 4.7 voice checks
+# (D69): no correctly heard clip scored below 0.75, two mishearings did.
+VOICE_MIN_CONFIDENCE = float(os.environ.get("COLLECTWISE_VOICE_MIN_CONFIDENCE", "0.6"))
 
 # Speech services. Off unless explicitly set to "deepgram", so nothing calls
 # Deepgram by accident (tests remove it). The key is DEEPGRAM_API_KEY.

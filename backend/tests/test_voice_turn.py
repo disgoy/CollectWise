@@ -294,3 +294,23 @@ def test_unknown_outcome_is_rejected_by_the_database(db_session) -> None:
     with pytest.raises(IntegrityError):
         db_session.commit()
     db_session.rollback()
+
+
+def test_default_threshold_is_the_measured_one() -> None:
+    # D69: chosen from the 4.7 voice checks. Skipped if the shell overrides it.
+    import os
+
+    if "COLLECTWISE_VOICE_MIN_CONFIDENCE" in os.environ:
+        pytest.skip("threshold overridden in this shell")
+    assert config.VOICE_MIN_CONFIDENCE == 0.6
+
+
+def test_a_mishearing_just_under_the_threshold_is_blocked(session, db_session, monkeypatch) -> None:
+    # "Pay thirteen dollars" was heard as "Pay $15" at 0.59 in the voice checks.
+    monkeypatch.setattr(config, "VOICE_MIN_CONFIDENCE", 0.6)
+    llm = FakeLLM([])
+
+    result = voice(session, db_session, stt=FakeSTT([Transcript("Pay $15", 0.59)]), llm=llm)
+
+    assert result.reply == REPLY_NOT_UNDERSTOOD
+    assert llm.requests == []

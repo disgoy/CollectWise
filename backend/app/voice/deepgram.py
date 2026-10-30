@@ -80,10 +80,23 @@ class DeepgramSTT:
         return Transcript(best.transcript or "", best.confidence)
 
 
+# Rates Deepgram accepts for linear16 speech.
+TTS_SAMPLE_RATES = (8_000, 16_000, 24_000, 32_000, 48_000)
+
+
 class DeepgramTTS:
-    def __init__(self, client: DeepgramClient, *, voice: str) -> None:
+    def __init__(
+        self,
+        client: DeepgramClient,
+        *,
+        voice: str,
+        sample_rate: int = TTS_SAMPLE_RATE,
+    ) -> None:
+        if sample_rate not in TTS_SAMPLE_RATES:
+            raise ValueError(f"Deepgram can't produce linear16 at {sample_rate} Hz")
         self._client = client
         self._voice = voice
+        self._sample_rate = sample_rate
 
     def synthesize(self, text: str) -> AudioClip:
         if len(text) > MAX_TTS_CHARS:
@@ -99,7 +112,7 @@ class DeepgramTTS:
                     model=self._voice,
                     encoding="linear16",
                     container="none",
-                    sample_rate=TTS_SAMPLE_RATE,
+                    sample_rate=self._sample_rate,
                     request_options=REQUEST_OPTIONS,
                 )
             )
@@ -107,7 +120,7 @@ class DeepgramTTS:
             if not _is_transient(exc):
                 raise
             raise _unavailable(exc, "text-to-speech") from exc
-        return AudioClip(data=audio, sample_rate=TTS_SAMPLE_RATE)
+        return AudioClip(data=audio, sample_rate=self._sample_rate)
 
 
 def deepgram_configured() -> bool:

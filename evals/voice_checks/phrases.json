@@ -1,0 +1,19 @@
+{
+  "phrases": [
+    {"id": "amount_fifteen", "kind": "amount", "text": "Please pay fifteen dollars from my main account.", "expect": "15"},
+    {"id": "amount_fifty", "kind": "amount", "text": "Please pay fifty dollars from my main account.", "expect": "50"},
+    {"id": "amount_thirteen", "kind": "amount", "text": "Pay thirteen dollars, please.", "expect": "13"},
+    {"id": "amount_thirty", "kind": "amount", "text": "Pay thirty dollars, please.", "expect": "30"},
+    {"id": "amount_dollars_and_cents", "kind": "amount", "text": "Can you pay one hundred twenty five dollars and fifty cents?", "expect": "125.50"},
+    {"id": "amount_a_hundred_and_twenty", "kind": "amount", "text": "I'd like to pay a hundred and twenty.", "expect": "120"},
+    {"id": "amount_two_thousand_rupees", "kind": "amount", "text": "Pay two thousand rupees from my savings account.", "expect": "2000"},
+    {"id": "confirm_yes", "kind": "confirm", "text": "Yes.", "expect": "yes"},
+    {"id": "confirm_go_ahead", "kind": "confirm", "text": "Yeah, go ahead.", "expect": "yes"},
+    {"id": "confirm_no", "kind": "confirm", "text": "No.", "expect": "no"},
+    {"id": "confirm_cancel", "kind": "confirm", "text": "Nope, cancel that.", "expect": "no"},
+    {"id": "confirm_unsure", "kind": "confirm", "text": "Hmm, maybe. I'm not sure.", "expect": "unsure"},
+    {"id": "label_savings", "kind": "label", "text": "Use my savings account.", "expect": "savings"},
+    {"id": "label_current", "kind": "label", "text": "From my current account, please.", "expect": "current"},
+    {"id": "handoff_person", "kind": "handoff", "text": "Can I talk to a real person?", "expect": "handoff"}
+  ]
+}

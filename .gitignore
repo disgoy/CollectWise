@@ -40,3 +40,6 @@ docs/PROGRESS.md
 .claude/hillclimb/**/state.json
 .claude/hillclimb/**/trajectory/
 .claude/hillclimb/archive/
+
+# Your own voice recordings for the voice checks (personal data, never committed)
+evals/voice_checks/recordings/

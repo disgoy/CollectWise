@@ -81,7 +81,7 @@ refuses paid runs until a person approves the harness with `--approve-harness`.
 | `COLLECTWISE_STT_MODEL` | `nova-3` | Deepgram speech-to-text model |
 | `COLLECTWISE_TTS_VOICE` | `aura-2-thalia-en` | Deepgram voice for spoken replies |
 | `DEEPGRAM_API_KEY` | none | Deepgram credentials |
-| `COLLECTWISE_VOICE_MIN_CONFIDENCE` | `0.5` | Voice turns heard with lower speech-to-text confidence get "say that again" instead of reaching the agent |
+| `COLLECTWISE_VOICE_MIN_CONFIDENCE` | `0.6` | Voice turns heard with lower speech-to-text confidence get "say that again" instead of reaching the agent |
 
 To hear the voice turn end to end (real Deepgram and Claude, a few cents):
 `COLLECTWISE_AGENT_LLM=anthropic COLLECTWISE_SPEECH=deepgram python -m scripts.smoke_voice`.

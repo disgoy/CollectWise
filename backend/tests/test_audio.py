@@ -8,6 +8,7 @@ import pytest
 from backend.app.voice.audio import (
     MAX_DURATION_MS,
     MAX_WAV_BYTES,
+    PCM_SUBFORMAT,
     AudioClip,
     AudioFormatError,
     read_wav,
@@ -140,6 +141,70 @@ def test_sample_rate_outside_range(sample_rate) -> None:
     raw = wav_bytes(bytes(2 * 1_000), sample_rate=sample_rate)
 
     assert reason(raw) == "unsupported_sample_rate"
+
+
+FLOAT_SUBFORMAT = bytes.fromhex("0300000000001000800000aa00389b71")
+
+
+def extensible_wav(
+    samples: bytes,
+    *,
+    sample_rate: int = 16_000,
+    subformat: bytes = PCM_SUBFORMAT,
+    bits: int = 16,
+    valid_bits: int = 16,
+    chunk_before_fmt: bool = False,
+) -> bytes:
+    """A WAV with the "extensible" header, as macOS afconvert writes."""
+    block = bits // 8
+    fmt = struct.pack("<HHIIHH", 0xFFFE, 1, sample_rate, sample_rate * block, block, bits)
+    fmt += struct.pack("<HHI", 22, valid_bits, 4) + subformat
+    body = b"WAVE"
+    if chunk_before_fmt:
+        body += b"JUNK" + struct.pack("<I", 4) + b"\x00" * 4
+    body += b"fmt " + struct.pack("<I", len(fmt)) + fmt
+    body += b"FLLR" + struct.pack("<I", 6) + b"\x00" * 6  # padding chunk, as afconvert adds
+    body += b"data" + struct.pack("<I", len(samples)) + samples
+    return b"RIFF" + struct.pack("<I", len(body)) + body
+
+
+@pytest.mark.parametrize("chunk_before_fmt", [False, True], ids=["fmt-first", "junk-first"])
+def test_extensible_header_with_plain_pcm_is_accepted(chunk_before_fmt) -> None:
+    data = tone_samples(500, 16_000)
+
+    clip = read_wav(extensible_wav(data, chunk_before_fmt=chunk_before_fmt))
+
+    assert clip == AudioClip(data=data, sample_rate=16_000)
+
+
+@pytest.mark.parametrize(
+    "kwargs",
+    [{"subformat": FLOAT_SUBFORMAT}, {"valid_bits": 12}],
+    ids=["float-subformat", "partial-bits"],
+)
+def test_other_extensible_audio_is_still_rejected(kwargs) -> None:
+    assert reason(extensible_wav(tone_samples(100, 16_000), **kwargs)) == "unsupported_encoding"
+
+
+def test_extensible_stereo_is_still_rejected() -> None:
+    raw = bytearray(extensible_wav(bytes(4 * 1_600)))
+    channels_at = raw.index(b"fmt ") + 10
+    struct.pack_into("<H", raw, channels_at, 2)
+
+    assert reason(bytes(raw)) == "unsupported_channels"
+
+
+@pytest.mark.parametrize(
+    ("cut_after_fmt", "expected"),
+    [(14, "not_wav"), (30, "unsupported_encoding")],
+    ids=["inside-basic-fields", "inside-extension"],
+)
+def test_extensible_header_cut_short_is_rejected_not_a_crash(cut_after_fmt, expected) -> None:
+    # Cut inside the extension, the header is left as is and its 0xFFFE tag
+    # is refused; cut earlier, it isn't a readable WAV at all.
+    raw = extensible_wav(tone_samples(100, 16_000))
+
+    assert reason(raw[: raw.index(b"fmt ") + cut_after_fmt]) == expected
 
 
 def test_header_claiming_zero_hz_is_rejected_not_a_crash() -> None:

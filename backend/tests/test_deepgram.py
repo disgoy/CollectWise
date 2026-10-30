@@ -153,6 +153,21 @@ def test_tts_asks_for_raw_pcm_and_wraps_it() -> None:
     }
 
 
+def test_tts_at_phone_quality() -> None:
+    sdk = StubSDK(speak=[b"\x00\x00" * 8_000])
+
+    clip = DeepgramTTS(sdk, voice="aura-2-draco-en", sample_rate=8_000).synthesize("Pay fifty dollars.")
+
+    assert clip.sample_rate == 8_000 and clip.duration_ms == 1_000
+    assert sdk.calls[0][1]["sample_rate"] == 8_000
+
+
+@pytest.mark.parametrize("rate", [11_025, 44_100, 0])
+def test_tts_rejects_rates_deepgram_cannot_produce(rate) -> None:
+    with pytest.raises(ValueError):
+        DeepgramTTS(StubSDK(speak=[]), voice="aura-2-thalia-en", sample_rate=rate)
+
+
 @pytest.mark.parametrize("error", TRANSIENT, ids=TRANSIENT_IDS)
 def test_tts_transient_failures_while_streaming_become_unavailable(error) -> None:
     sdk = StubSDK(speak=[b"\x00\x00", error])
