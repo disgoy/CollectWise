@@ -3,3 +3,5 @@
 
 httpx==0.28.1
 pytest==9.1.1
+# Test coverage (H5): python -m pytest --cov --cov-report=term-missing
+pytest-cov==7.1.0

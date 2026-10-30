@@ -1,0 +1,12 @@
+# Test coverage settings (H5). Run: python -m pytest --cov --cov-report=term-missing
+[run]
+# Branch coverage: both sides of every if, not just every line.
+branch = True
+source =
+    backend/app
+    evals
+omit =
+    backend/tests/*
+
+[report]
+skip_empty = True

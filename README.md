@@ -42,6 +42,12 @@ python -m pytest -q
 
 Tests use their own temporary databases and never touch `collectwise.db`.
 
+To measure line and branch coverage (settings in `.coveragerc`):
+
+```bash
+python -m pytest --cov --cov-report=term-missing
+```
+
 ## Evaluate the agent
 
 `evals/agent_conversations/` plays 25 scripted conversations (payments,
@@ -108,12 +114,13 @@ and answer 503 if no key is configured. **Agent** routes are for callers: they
 need `Authorization: Bearer <session token>`, and the caller's identity comes
 only from that token, and they are rate limited per customer (429 with
 `Retry-After`). Conversations live in memory: idle ones expire and all are
-lost on restart. Only `/health` is open. Plan for deployment: only the
+lost on restart. Only `/health` and `/health/ready` are open. Plan for deployment: only the
 agent routes and `/health` should be reachable from the internet.
 
 | Method | Path | Purpose |
 |---|---|---|
-| GET | `/health` | Health check |
+| GET | `/health` | Liveness: the process answers (no dependencies) |
+| GET | `/health/ready` | Readiness: the database answers; 503 if not |
 | POST | `/customers` | Create a customer |
 | GET | `/customers/{customer_id}` | Get a customer |
 | GET | `/customers/{customer_id}/accounts` | List a customer's accounts |

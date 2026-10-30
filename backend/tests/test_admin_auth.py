@@ -22,6 +22,8 @@ from backend.app.api import accounts, agent, customers, servicing, voice
 from backend.app.main import app
 
 BACK_OFFICE_PREFIXES = ("/customers", "/accounts", "/servicing")
+# The only routes anyone may call: liveness and readiness (H5).
+OPEN_ROUTES = {("GET", "/health"), ("GET", "/health/ready")}
 
 # Every back-office route, with a body that would succeed with the key.
 ROUTES = [
@@ -104,7 +106,7 @@ def test_every_route_is_back_office_agent_or_health() -> None:
         elif path.startswith("/agent/"):
             assert schemes == {"HTTPBearer"}, path
         else:
-            assert (method, path) == ("GET", "/health"), f"unprotected route {method} {path}"
+            assert (method, path) in OPEN_ROUTES, f"unprotected route {method} {path}"
 
     # The ROUTES table covers every back-office route.
     assert len(back_office) == len(ROUTES)
@@ -120,8 +122,8 @@ def test_no_route_is_hidden_from_the_schema() -> None:
 
 @pytest.mark.parametrize(
     ("method", "path"),
-    [(method, path) for method, path, _ in OPERATIONS if path != "/health"],
-    ids=[f"{method} {path}" for method, path, _ in OPERATIONS if path != "/health"],
+    [(method, path) for method, path, _ in OPERATIONS if (method, path) not in OPEN_ROUTES],
+    ids=[f"{method} {path}" for method, path, _ in OPERATIONS if (method, path) not in OPEN_ROUTES],
 )
 def test_every_route_refuses_anonymous_callers(anonymous, method, path) -> None:
     # The schema says what each route declares; this checks what it does.
@@ -215,5 +217,6 @@ def test_the_admin_key_does_not_open_the_agent(anonymous) -> None:
         assert anonymous.post("/agent/sessions", headers=headers).status_code == 401
 
 
-def test_health_needs_no_key(anonymous) -> None:
+def test_health_checks_need_no_key(anonymous) -> None:
     assert anonymous.get("/health").status_code == 200
+    assert anonymous.get("/health/ready").status_code == 200
