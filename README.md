@@ -94,6 +94,9 @@ does not read it itself; load it into your shell with `set -a; source .env; set 
 | GET | `/accounts/{account_id}` | Get an account |
 | POST | `/servicing/requests` | Evaluate a servicing request |
 | GET | `/servicing/requests/{request_id}` | Get a stored servicing request |
+| POST | `/agent/sessions` | Start a conversation (Bearer session token) |
+| POST | `/agent/sessions/{session_id}/turns` | Send a typed caller turn |
+| POST | `/agent/sessions/{session_id}/voice-turns` | Send a spoken caller turn (WAV body); returns transcript, reply and base64 WAV audio |
 
 ## Roadmap
 
