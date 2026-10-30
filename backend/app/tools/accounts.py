@@ -20,6 +20,8 @@ def list_accounts(ctx: ToolContext, args: ListAccountsArgs) -> ToolResult:
         accounts=[
             {
                 "account_id": account.account_id,
+                # What to call the account aloud (D58); None if it has no label.
+                "label": account.label,
                 "currency": account.currency,
                 "status": account.status.value,
             }

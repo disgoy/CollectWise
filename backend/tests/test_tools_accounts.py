@@ -33,9 +33,38 @@ def test_list_accounts_returns_only_the_callers_accounts(db_session: Session) ->
 
     assert result.ok is True
     assert result.data["accounts"] == [
-        {"account_id": "acct_a_1", "currency": "INR", "status": "active"},
-        {"account_id": "acct_a_2", "currency": "USD", "status": "frozen"},
+        {"account_id": "acct_a_1", "label": None, "currency": "INR", "status": "active"},
+        {"account_id": "acct_a_2", "label": None, "currency": "USD", "status": "frozen"},
     ]
+
+
+def test_list_accounts_includes_labels_for_speaking(db_session: Session) -> None:
+    seed_customer(db_session, "cust_a", [("acct_a_1", "INR", "active"), ("acct_a_2", "INR", "active")])
+    seed_customer(db_session, "cust_b", [("acct_b_1", "USD", "active")])
+    for account_id, customer_id, label in [
+        ("acct_a_1", "cust_a", "savings"),
+        ("acct_b_1", "cust_b", "savings"),  # same name, another customer
+    ]:
+        db_session.add(models.AccountLabelRecord(account_id=account_id, customer_id=customer_id, label=label))
+    db_session.commit()
+
+    result = list_accounts(context_for(db_session, "cust_a"), ListAccountsArgs())
+
+    assert [(a["account_id"], a["label"]) for a in result.data["accounts"]] == [
+        ("acct_a_1", "savings"),
+        ("acct_a_2", None),
+    ]
+
+
+def test_a_label_is_not_an_account_id(db_session: Session) -> None:
+    # Tools take exact IDs; a label never reaches an account.
+    seed_customer(db_session, "cust_a", [("acct_a_1", "USD", "active")])
+    db_session.add(models.AccountLabelRecord(account_id="acct_a_1", customer_id="cust_a", label="main"))
+    db_session.commit()
+
+    result = get_account_summary(context_for(db_session, "cust_a"), GetAccountSummaryArgs(account_id="main"))
+
+    assert result == ToolResult.failure("account_not_found")
 
 
 def test_list_accounts_does_not_expose_balances(db_session: Session) -> None:

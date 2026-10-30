@@ -44,8 +44,10 @@ _SPECS = [
     ToolSpec(
         name="list_accounts",
         description=(
-            "List the caller's accounts (account ID, currency, status). Use it "
-            "to find out which account the caller means. Does not return balances."
+            "List the caller's accounts (account ID, label, currency, status). Use "
+            "it to find out which account the caller means. Pass account IDs to "
+            "tools, but call accounts by their label when speaking. Does not "
+            "return balances."
         ),
         args_model=ListAccountsArgs,
         function=list_accounts,

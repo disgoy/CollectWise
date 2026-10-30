@@ -51,7 +51,8 @@ from backend.app.agent.prompts import SYSTEM_PROMPT
 from backend.app.agent.sessions import SessionStore
 from backend.app.db import models
 from backend.app.db.base import Base
-from backend.app.schemas.domain import ServicingOperation, ServicingRequest
+from backend.app.schemas.domain import AccountStatus, ServicingOperation, ServicingRequest
+from backend.app.services.accounts import create_account
 from backend.app.services.servicing import evaluate_servicing_request
 from evals.agent_conversations import grading
 from evals.agent_conversations.oracle import CONSTANT_REPLIES, ConstantLLM, oracle_llm
@@ -158,23 +159,23 @@ def new_database() -> Session:
 
 
 def seed(db: Session, world: dict, case: dict) -> set[str]:
-    """Create the world's customers and accounts, then the case's earlier
-    payment requests through the servicing service. Returns their IDs."""
-    for customer_id, accounts in world["customers"].items():
+    """Create the world's customers, then their accounts (with labels) and the
+    case's earlier payment requests through the real services. Returns the
+    earlier requests' IDs."""
+    for customer_id in world["customers"]:
         db.add(models.CustomerRecord(customer_id=customer_id, display_name="Synthetic Customer"))
-        # No ORM relationship orders these inserts, so save the customer first.
-        db.flush()
-        for account in accounts:
-            db.add(
-                models.AccountRecord(
-                    account_id=account["account_id"],
-                    customer_id=customer_id,
-                    balance=Decimal(account["balance"]),
-                    currency=account["currency"],
-                    status=account["status"],
-                )
-            )
     db.commit()
+    for customer_id, accounts in world["customers"].items():
+        for account in accounts:
+            create_account(
+                db,
+                account_id=account["account_id"],
+                customer_id=customer_id,
+                balance=Decimal(account["balance"]),
+                currency=account["currency"],
+                status=AccountStatus(account["status"]),
+                label=account.get("label"),
+            )
 
     history_ids = set()
     for index, payment in enumerate(case.get("history", [])):

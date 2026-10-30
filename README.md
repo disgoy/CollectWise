@@ -90,7 +90,7 @@ does not read it itself; load it into your shell with `set -a; source .env; set 
 | POST | `/customers` | Create a customer |
 | GET | `/customers/{customer_id}` | Get a customer |
 | GET | `/customers/{customer_id}/accounts` | List a customer's accounts |
-| POST | `/accounts` | Create an account |
+| POST | `/accounts` | Create an account, optionally with a spoken `label` such as "savings" (unique per customer) |
 | GET | `/accounts/{account_id}` | Get an account |
 | POST | `/servicing/requests` | Evaluate a servicing request |
 | GET | `/servicing/requests/{request_id}` | Get a stored servicing request |

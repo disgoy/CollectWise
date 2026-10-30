@@ -368,3 +368,10 @@ def test_judge_is_told_about_responsiveness() -> None:
 
 def test_judge_compares_amounts_by_value() -> None:
     assert "Amounts match by value" in grading.JUDGE_SYSTEM
+
+
+def test_eval_world_accounts_have_labels_the_agent_can_see() -> None:
+    _, trace = play("facts_balance_two_accounts")
+
+    [listed] = [json.loads(t["content"]) for t in trace if t["role"] == "tool_result"]
+    assert {a["label"] for a in listed["data"]["accounts"]} == {"savings", "current"}

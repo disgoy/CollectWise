@@ -3,10 +3,11 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from backend.app.db.models import CustomerRecord, AccountRecord
+from backend.app.db.models import CustomerRecord
 from backend.app.db.session import get_db
 from backend.app.schemas.customer import CustomerCreate, CustomerResponse
 from backend.app.schemas.account import AccountResponse
+from backend.app.services.accounts import AccountDetails, list_customer_account_details
 
 router = APIRouter(prefix="/customers", tags=["Customers"])
 
@@ -65,7 +66,7 @@ def get_customer(
 def list_customer_accounts(
     customer_id: str,
     db: Session = Depends(get_db),
-) -> list[AccountRecord]:
+) -> list[AccountDetails]:
     customer = db.get(CustomerRecord, customer_id)
 
     if customer is None:
@@ -74,9 +75,4 @@ def list_customer_accounts(
             detail="Customer not found",
         )
 
-    return list(
-        db.query(AccountRecord)
-        .filter(AccountRecord.customer_id == customer_id)
-        .order_by(AccountRecord.account_id)
-        .all()
-    )
+    return list_customer_account_details(db, customer_id)

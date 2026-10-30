@@ -104,7 +104,7 @@ def main() -> int:
             client.post("/customers", json={"customer_id": customer_id, "display_name": "Synthetic Customer"})
         client.post("/accounts", json={
             "account_id": "acct_smoke_a1", "customer_id": CUSTOMER,
-            "balance": "500.00", "currency": "USD",
+            "balance": "500.00", "currency": "USD", "label": "main",
         })
         client.post("/accounts", json={
             "account_id": "acct_smoke_b1", "customer_id": OTHER_CUSTOMER,

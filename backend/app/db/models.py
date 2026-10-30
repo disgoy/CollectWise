@@ -9,6 +9,7 @@ from sqlalchemy import (
     Numeric,
     String,
     Text,
+    UniqueConstraint,
 )
 from sqlalchemy.orm import Mapped, mapped_column
 from backend.app.db.base import Base
@@ -309,5 +310,35 @@ class VoiceTurnMetricRecord(Base):
         CheckConstraint(
             "confidence IS NULL OR (confidence >= 0 AND confidence <= 1)",
             name="ck_voice_turn_metrics_confidence",
+        ),
+    )
+
+
+class AccountLabelRecord(Base):
+    """A spoken name for an account, such as "savings" (D58). Its own table,
+    not a column on accounts, because create_all never alters tables (D16)."""
+
+    __tablename__ = "account_labels"
+
+    account_id: Mapped[str] = mapped_column(
+        ForeignKey("accounts.account_id"),
+        primary_key=True,
+    )
+    # Copied from the account by the service (never from input), so the
+    # database can enforce one label per name per customer.
+    customer_id: Mapped[str] = mapped_column(
+        String(50),
+        nullable=False,
+    )
+    label: Mapped[str] = mapped_column(
+        String(30),
+        nullable=False,
+    )
+
+    __table_args__ = (
+        UniqueConstraint("customer_id", "label", name="uq_account_labels_customer_label"),
+        CheckConstraint(
+            "label = lower(label) AND length(label) BETWEEN 1 AND 30",
+            name="ck_account_labels_label",
         ),
     )

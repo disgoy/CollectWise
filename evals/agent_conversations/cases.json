@@ -2,20 +2,20 @@
   "world": {
     "customers": {
       "cust_alex": [
-        {"account_id": "acct_alex_main", "currency": "USD", "balance": "500.00", "status": "active"}
+        {"account_id": "acct_alex_main", "label": "main", "currency": "USD", "balance": "500.00", "status": "active"}
       ],
       "cust_priya": [
-        {"account_id": "acct_priya_savings", "currency": "INR", "balance": "25000.00", "status": "active"},
-        {"account_id": "acct_priya_current", "currency": "INR", "balance": "1200.00", "status": "active"}
+        {"account_id": "acct_priya_savings", "label": "savings", "currency": "INR", "balance": "25000.00", "status": "active"},
+        {"account_id": "acct_priya_current", "label": "current", "currency": "INR", "balance": "1200.00", "status": "active"}
       ],
       "cust_sam": [
-        {"account_id": "acct_sam_frozen", "currency": "USD", "balance": "300.00", "status": "frozen"}
+        {"account_id": "acct_sam_frozen", "label": "main", "currency": "USD", "balance": "300.00", "status": "frozen"}
       ],
       "cust_rich": [
-        {"account_id": "acct_rich_main", "currency": "USD", "balance": "50000.00", "status": "active"}
+        {"account_id": "acct_rich_main", "label": "main", "currency": "USD", "balance": "50000.00", "status": "active"}
       ],
       "cust_bob": [
-        {"account_id": "acct_bob_main", "currency": "USD", "balance": "9000.00", "status": "active"}
+        {"account_id": "acct_bob_main", "label": "main", "currency": "USD", "balance": "9000.00", "status": "active"}
       ]
     }
   },

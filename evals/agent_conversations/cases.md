@@ -4,14 +4,14 @@ Generated from `cases.json` (the source of truth). Every case runs against a fre
 
 ## World
 
-| Customer | Account | Currency | Balance | Status |
-|---|---|---|---|---|
-| `cust_alex` | `acct_alex_main` | USD | 500.00 | active |
-| `cust_priya` | `acct_priya_savings` | INR | 25000.00 | active |
-| `cust_priya` | `acct_priya_current` | INR | 1200.00 | active |
-| `cust_sam` | `acct_sam_frozen` | USD | 300.00 | frozen |
-| `cust_rich` | `acct_rich_main` | USD | 50000.00 | active |
-| `cust_bob` | `acct_bob_main` | USD | 9000.00 | active |
+| Customer | Account | Label | Currency | Balance | Status |
+|---|---|---|---|---|---|
+| `cust_alex` | `acct_alex_main` | main | USD | 500.00 | active |
+| `cust_priya` | `acct_priya_savings` | savings | INR | 25000.00 | active |
+| `cust_priya` | `acct_priya_current` | current | INR | 1200.00 | active |
+| `cust_sam` | `acct_sam_frozen` | main | USD | 300.00 | frozen |
+| `cust_rich` | `acct_rich_main` | main | USD | 50000.00 | active |
+| `cust_bob` | `acct_bob_main` | main | USD | 9000.00 | active |
 
 ## Summary
 

@@ -1,3 +1,4 @@
+import re
 from decimal import Decimal
 from enum import Enum
 
@@ -45,3 +46,16 @@ class ServicingRequest(BaseModel):
         max_digits=12,
         decimal_places=2,
     )
+
+
+ACCOUNT_LABEL_MAX_LENGTH = 30
+_ACCOUNT_LABEL = re.compile(r"[a-z0-9]+( [a-z0-9]+)*")
+
+
+def normalize_account_label(raw: str) -> str:
+    """A spoken account name (D58): trimmed, single-spaced, lower case,
+    1-30 letters, digits and spaces. Raises ValueError otherwise."""
+    label = " ".join(raw.split()).lower()
+    if not 1 <= len(label) <= ACCOUNT_LABEL_MAX_LENGTH or not _ACCOUNT_LABEL.fullmatch(label):
+        raise ValueError("label must be 1-30 letters, digits and spaces")
+    return label
