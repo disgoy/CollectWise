@@ -84,6 +84,12 @@ refuses paid runs until a person approves the harness with `--approve-harness`.
 | `COLLECTWISE_STT_MODEL` | `nova-3` | Deepgram speech-to-text model |
 | `COLLECTWISE_TTS_VOICE` | `aura-2-thalia-en` | Deepgram voice for spoken replies |
 | `DEEPGRAM_API_KEY` | none | Deepgram credentials |
+| `COLLECTWISE_SESSION_IDLE_MINUTES` | `15` | A conversation unused this long expires |
+| `COLLECTWISE_MAX_SESSIONS_PER_CUSTOMER` | `3` | Open conversations per customer; a new one replaces their least recently used |
+| `COLLECTWISE_MAX_SESSIONS` | `1000` | Open conversations in total; beyond it new ones get 503 |
+| `COLLECTWISE_MAX_CALLER_TURNS` | `30` | Caller turns per conversation before it is handed to a person |
+| `COLLECTWISE_TURNS_PER_MINUTE` | `10` | Turns (typed and spoken together) per customer per minute; beyond it 429 |
+| `COLLECTWISE_SESSION_STARTS_PER_MINUTE` | `5` | New conversations per customer per minute; beyond it 429 |
 | `COLLECTWISE_VOICE_MIN_CONFIDENCE` | `0.6` | Voice turns heard with lower speech-to-text confidence get "say that again" instead of reaching the agent |
 
 To hear the voice turn end to end (real Deepgram and Claude, a few cents):
@@ -98,7 +104,9 @@ There are two kinds of route. **Back-office** routes (customers, accounts,
 servicing) are for operators and setup: they need the `X-Admin-Key` header
 and answer 503 if no key is configured. **Agent** routes are for callers: they
 need `Authorization: Bearer <session token>`, and the caller's identity comes
-only from that token. Only `/health` is open. Plan for deployment: only the
+only from that token, and they are rate limited per customer (429 with
+`Retry-After`). Conversations live in memory: idle ones expire and all are
+lost on restart. Only `/health` is open. Plan for deployment: only the
 agent routes and `/health` should be reachable from the internet.
 
 | Method | Path | Purpose |

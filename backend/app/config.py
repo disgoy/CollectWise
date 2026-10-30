@@ -15,6 +15,17 @@ SESSION_TOKEN_TTL_SECONDS = int(os.environ.get("COLLECTWISE_SESSION_TTL_SECONDS"
 # default: unset means those routes refuse every request.
 ADMIN_API_KEY = os.environ.get("COLLECTWISE_ADMIN_KEY")
 
+# Conversation lifetime and limits (D72). Conversations live in memory:
+# idle ones expire, each customer and the server hold only so many, a long
+# conversation is handed to a person, and each customer's turns and new
+# conversations are rate limited so nobody can run up model and speech costs.
+SESSION_IDLE_MINUTES = float(os.environ.get("COLLECTWISE_SESSION_IDLE_MINUTES", "15"))
+MAX_SESSIONS_PER_CUSTOMER = int(os.environ.get("COLLECTWISE_MAX_SESSIONS_PER_CUSTOMER", "3"))
+MAX_SESSIONS = int(os.environ.get("COLLECTWISE_MAX_SESSIONS", "1000"))
+MAX_CALLER_TURNS = int(os.environ.get("COLLECTWISE_MAX_CALLER_TURNS", "30"))
+TURNS_PER_MINUTE = int(os.environ.get("COLLECTWISE_TURNS_PER_MINUTE", "10"))
+SESSION_STARTS_PER_MINUTE = int(os.environ.get("COLLECTWISE_SESSION_STARTS_PER_MINUTE", "5"))
+
 # The agent's LLM. Off unless explicitly set to "anthropic", so nothing calls
 # the API by accident (tests never set it).
 AGENT_LLM = os.environ.get("COLLECTWISE_AGENT_LLM")

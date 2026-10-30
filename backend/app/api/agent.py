@@ -7,8 +7,9 @@ from sqlalchemy.orm import Session
 from backend.app.agent.llm import LLMClient
 from backend.app.agent.loop import run_turn
 from backend.app.agent.prompts import SYSTEM_PROMPT
-from backend.app.agent.sessions import SessionStore
+from backend.app.agent.sessions import SessionStore, SessionStoreFullError
 from backend.app.api.providers import get_llm, get_session_store
+from backend.app.api.rate_limits import limit_session_starts, limit_turns
 from backend.app.auth.dependencies import authenticated_customer_id
 from backend.app.db.session import get_db
 from backend.app.services.conversation_events import (
@@ -38,7 +39,13 @@ class TurnResponse(BaseModel):
     handed_off: bool
 
 
-@router.post("/sessions", response_model=SessionCreatedResponse, status_code=201)
+# Rate limits run first: route dependencies are resolved before parameters (D72).
+@router.post(
+    "/sessions",
+    response_model=SessionCreatedResponse,
+    status_code=201,
+    dependencies=[Depends(limit_session_starts)],
+)
 def create_session(
     customer_id: str = Depends(authenticated_customer_id),
     db: Session = Depends(get_db),
@@ -47,7 +54,10 @@ def create_session(
     if not customer_exists(db, customer_id):
         raise HTTPException(status_code=404, detail="Customer not found")
 
-    session = store.create(customer_id)
+    try:
+        session = store.create(customer_id)
+    except SessionStoreFullError:
+        raise HTTPException(status_code=503, detail="Service busy, please try again later") from None
     record_conversation_events(
         db,
         [
@@ -62,7 +72,11 @@ def create_session(
     return SessionCreatedResponse(session_id=session.session_id)
 
 
-@router.post("/sessions/{session_id}/turns", response_model=TurnResponse)
+@router.post(
+    "/sessions/{session_id}/turns",
+    response_model=TurnResponse,
+    dependencies=[Depends(limit_turns)],
+)
 def send_turn(
     session_id: str,
     body: TurnRequest,

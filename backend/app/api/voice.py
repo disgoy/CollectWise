@@ -13,6 +13,7 @@ from backend.app.agent.llm import LLMClient
 from backend.app.agent.prompts import SYSTEM_PROMPT
 from backend.app.agent.sessions import SessionStore
 from backend.app.api.providers import get_llm, get_session_store, get_stt, get_tts
+from backend.app.api.rate_limits import limit_turns
 from backend.app.auth.dependencies import authenticated_customer_id
 from backend.app.db.session import get_db
 from backend.app.voice.audio import MAX_WAV_BYTES, AudioFormatError, read_wav, write_wav
@@ -56,7 +57,12 @@ async def _read_body_capped(request: Request, limit: int) -> bytes:
     return bytes(body)
 
 
-@router.post("/sessions/{session_id}/voice-turns", response_model=VoiceTurnResponse)
+# The rate limit runs before speech, the model or the upload (D72).
+@router.post(
+    "/sessions/{session_id}/voice-turns",
+    response_model=VoiceTurnResponse,
+    dependencies=[Depends(limit_turns)],
+)
 async def send_voice_turn(
     session_id: str,
     request: Request,

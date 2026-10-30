@@ -7,6 +7,7 @@ import pytest
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from backend.app import config
 from backend.app.agent.llm import LLMUnavailableError
 from backend.app.agent.loop import (
     MAX_MODEL_CALLS,
@@ -14,12 +15,14 @@ from backend.app.agent.loop import (
     REPLY_EMPTY,
     REPLY_HANDED_OFF,
     REPLY_STUCK,
+    REPLY_TURN_LIMIT,
     REPLY_UNAVAILABLE,
     ToolCallRecord,
     run_turn,
 )
 from backend.app.agent.sessions import ConversationSession, SessionStore
 from backend.app.db import models
+from backend.app.tools.handoff import HandoffToHumanArgs
 from backend.app.tools.registry import tool_schemas
 from backend.tests.fake_llm import FakeLLM, FakeResponse, TextBlock, say, use
 from backend.tests.helpers import seed_customer
@@ -245,3 +248,72 @@ def test_session_store_scopes_sessions_to_their_customer() -> None:
     assert store.get_for_customer(mine.session_id, "cust_a") is mine
     assert store.get_for_customer(mine.session_id, "cust_b") is None
     assert store.get_for_customer("sess_missing", "cust_a") is None
+
+
+# --- turn limit (D72) ---------------------------------------------------------
+
+
+def test_the_turn_after_the_limit_goes_to_a_person_without_a_model_call(
+    session, db_session, monkeypatch
+) -> None:
+    monkeypatch.setattr(config, "MAX_CALLER_TURNS", 3)
+    llm = FakeLLM([say("ok"), say("ok"), say("ok")])
+    for _ in range(3):
+        assert turn(session, db_session, llm).reply == "ok"
+    messages_before = list(session.messages)
+
+    result = turn(session, db_session, llm, "one more thing")
+
+    assert result.reply == REPLY_TURN_LIMIT
+    assert result.handed_off is True
+    assert result.tool_calls == []
+    assert len(llm.requests) == 3
+    assert session.state.turn == 3  # not counted
+    assert session.state.handoff.reason == "turn_limit"
+    assert session.messages == messages_before
+
+    after = turn(session, db_session, llm)
+    assert after.reply == REPLY_HANDED_OFF
+    assert len(llm.requests) == 3
+
+
+def test_the_shipped_limit_is_30_turns(session, db_session) -> None:
+    assert config.MAX_CALLER_TURNS == 30
+    llm = FakeLLM([say("ok")] * 30)
+    for _ in range(30):
+        assert turn(session, db_session, llm).reply == "ok"
+
+    assert turn(session, db_session, llm).reply == REPLY_TURN_LIMIT
+    assert len(llm.requests) == 30
+
+
+def test_the_turn_limit_cancels_a_pending_payment(session, db_session, monkeypatch) -> None:
+    monkeypatch.setattr(config, "MAX_CALLER_TURNS", 1)
+    propose = ("t1", "propose_payment", {"account_id": "acct_a_1", "amount": "200.00"})
+    llm = FakeLLM([use(propose), say("Shall I submit 200 USD?")])
+    turn(session, db_session, llm, "pay 200")
+    assert session.state.pending_payment is not None
+
+    turn(session, db_session, llm, "yes")
+
+    assert session.state.pending_payment is None
+    assert payment_count(db_session) == 0
+
+
+def test_the_turn_limit_is_recorded(session, db_session, monkeypatch) -> None:
+    monkeypatch.setattr(config, "MAX_CALLER_TURNS", 0)
+
+    turn(session, db_session, FakeLLM([]))
+
+    events = db_session.scalars(
+        select(models.ConversationEventRecord).where(
+            models.ConversationEventRecord.session_id == session.session_id
+        )
+    ).all()
+    assert [(e.event_type, e.outcome) for e in events] == [("turn_completed", "turn_limit")]
+
+
+def test_the_model_cannot_choose_the_turn_limit_reason() -> None:
+    reasons = HandoffToHumanArgs.model_json_schema()["properties"]["reason"]["enum"]
+
+    assert "turn_limit" not in reasons

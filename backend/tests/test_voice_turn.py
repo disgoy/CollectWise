@@ -7,7 +7,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from backend.app import config
-from backend.app.agent.loop import REPLY_HANDED_OFF
+from backend.app.agent.loop import REPLY_HANDED_OFF, REPLY_TURN_LIMIT
 from backend.app.agent.sessions import ConversationSession, SessionStore
 from backend.app.db import models
 from backend.app.services import voice_metrics
@@ -314,3 +314,18 @@ def test_a_mishearing_just_under_the_threshold_is_blocked(session, db_session, m
 
     assert result.reply == REPLY_NOT_UNDERSTOOD
     assert llm.requests == []
+
+
+def test_a_spoken_turn_past_the_limit_is_handed_off(session, db_session, monkeypatch) -> None:
+    monkeypatch.setattr(config, "MAX_CALLER_TURNS", 0)
+    stt = FakeSTT([Transcript("Hello?", 0.95)])
+    tts = FakeTTS()
+
+    result = voice(session, db_session, stt=stt, tts=tts)
+
+    assert result.reply == REPLY_TURN_LIMIT
+    assert result.handed_off is True
+    assert tts.texts == [REPLY_TURN_LIMIT]
+
+    # From then on nothing is transcribed (D63): the script has no more lines.
+    assert voice(session, db_session, stt=stt).reply == REPLY_HANDED_OFF

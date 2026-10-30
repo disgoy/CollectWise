@@ -2,7 +2,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from backend.app.tools.base import Handoff, ToolContext, ToolResult
+from backend.app.tools.base import ConversationState, Handoff, ToolContext, ToolResult
 
 
 # A fixed reason code only. No free-text summary: the LLM could copy the
@@ -20,19 +20,18 @@ class HandoffToHumanArgs(BaseModel):
     ] = Field(description="Why the conversation is being handed to a human.")
 
 
-def handoff_to_human(ctx: ToolContext, args: HandoffToHumanArgs) -> ToolResult:
+def hand_off(state: ConversationState, reason: str) -> dict | None:
     """Hand the conversation to a human. A stub: no real queue yet.
 
-    A payment that was proposed but not submitted is cancelled, so nothing is
-    left waiting for a confirmation the agent will no longer handle. Submitted
-    payments are recorded decisions and are left alone. This is conversation
-    state, never a servicing audit event.
+    Used by the tool below and by code-driven handoffs (the turn limit, D72),
+    whose reasons the model is never offered. A payment that was proposed but
+    not submitted is cancelled, so nothing is left waiting for a confirmation
+    the agent will no longer handle; it is returned. Submitted payments are
+    recorded decisions and are left alone. This is conversation state, never a
+    servicing audit event. The caller checks there was no handoff already.
     """
-    if ctx.state.handoff is not None:
-        return ToolResult.failure("conversation_handed_off")
-
     cancelled_payment = None
-    pending = ctx.state.pending_payment
+    pending = state.pending_payment
 
     if pending is not None and not pending.submitted:
         cancelled_payment = {
@@ -40,9 +39,18 @@ def handoff_to_human(ctx: ToolContext, args: HandoffToHumanArgs) -> ToolResult:
             "amount": str(pending.amount),
             "currency": pending.currency,
         }
-        ctx.state.pending_payment = None
+        state.pending_payment = None
 
-    ctx.state.handoff = Handoff(reason=args.reason, turn=ctx.state.turn)
+    state.handoff = Handoff(reason=reason, turn=state.turn)
+    return cancelled_payment
+
+
+def handoff_to_human(ctx: ToolContext, args: HandoffToHumanArgs) -> ToolResult:
+    """Hand the conversation to a human."""
+    if ctx.state.handoff is not None:
+        return ToolResult.failure("conversation_handed_off")
+
+    cancelled_payment = hand_off(ctx.state, args.reason)
 
     return ToolResult.success(
         status="handoff_requested",

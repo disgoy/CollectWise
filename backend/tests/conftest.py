@@ -25,6 +25,12 @@ from sqlalchemy import create_engine, event  # noqa: E402
 from sqlalchemy.orm import Session, sessionmaker  # noqa: E402
 from sqlalchemy.pool import StaticPool  # noqa: E402
 
+from backend.app import config  # noqa: E402
+from backend.app.api.rate_limits import (  # noqa: E402
+    SlidingWindowLimiter,
+    get_session_start_limiter,
+    get_turn_limiter,
+)
 from backend.app.db import models  # noqa: E402, F401  Registers the SQLAlchemy models
 from backend.app.db.base import Base  # noqa: E402
 from backend.app.db.session import get_db  # noqa: E402
@@ -57,6 +63,12 @@ def client() -> Generator[TestClient, None, None]:
             yield db
 
     app.dependency_overrides[get_db] = override_get_db
+    # Fresh rate limits per test (shipped values), so one test's requests
+    # never count against the next.
+    turn_limiter = SlidingWindowLimiter(config.TURNS_PER_MINUTE)
+    start_limiter = SlidingWindowLimiter(config.SESSION_STARTS_PER_MINUTE)
+    app.dependency_overrides[get_turn_limiter] = lambda: turn_limiter
+    app.dependency_overrides[get_session_start_limiter] = lambda: start_limiter
 
     try:
         # Sends the admin key, so tests of the back-office routes can focus

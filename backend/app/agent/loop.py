@@ -7,6 +7,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
+from backend.app import config
 from backend.app.agent.llm import LLMClient, LLMUnavailableError
 from backend.app.agent.sessions import ConversationSession
 from backend.app.services.conversation_events import (
@@ -14,6 +15,7 @@ from backend.app.services.conversation_events import (
     record_conversation_events,
 )
 from backend.app.tools.base import ToolContext, ToolResult
+from backend.app.tools.handoff import hand_off
 from backend.app.tools.registry import execute_tool, tool_schemas
 
 logger = logging.getLogger(__name__)
@@ -28,6 +30,10 @@ REPLY_UNAVAILABLE = "Sorry, I'm having trouble right now. Please try again in a 
 REPLY_STUCK = "Sorry, I wasn't able to finish that. I'm connecting you with a member of our team."
 REPLY_EMPTY = "Sorry, could you say that again?"
 REPLY_HANDED_OFF = "You're being connected to a member of our team. Please hold."
+REPLY_TURN_LIMIT = (
+    "We've covered a lot in this call, so I'm connecting you with a member of our team "
+    "who can help you further. Please hold."
+)
 
 
 @dataclass(frozen=True)
@@ -131,6 +137,13 @@ def _run_turn(
     # After a handoff the agent no longer converses (D33).
     if state.handoff is not None:
         return finish(REPLY_HANDED_OFF, "already_handed_off")
+
+    # A long conversation goes to a person, which also bounds its history
+    # and cost (D72). Decided before counting the turn or calling the model.
+    if state.turn >= config.MAX_CALLER_TURNS:
+        hand_off(state, "turn_limit")
+        logger.info("Turn limit reached in session %s", session.session_id)
+        return finish(REPLY_TURN_LIMIT, "turn_limit")
 
     # The only place a caller turn is counted (D24).
     state.start_caller_turn()
