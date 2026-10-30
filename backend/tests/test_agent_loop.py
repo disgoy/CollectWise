@@ -11,6 +11,7 @@ from backend.app import config
 from backend.app.agent.llm import LLMUnavailableError
 from backend.app.agent.loop import (
     MAX_MODEL_CALLS,
+    NOTE_PREFIX,
     REPLY_CANNOT_HELP,
     REPLY_EMPTY,
     REPLY_HANDED_OFF,
@@ -20,7 +21,8 @@ from backend.app.agent.loop import (
     ToolCallRecord,
     run_turn,
 )
-from backend.app.agent.sessions import ConversationSession, SessionStore
+from backend.app.agent.prompts import SYSTEM_PROMPT
+from backend.app.agent.sessions import MAX_UNHEARD_REPLIES, ConversationSession, SessionStore
 from backend.app.db import models
 from backend.app.tools.handoff import HandoffToHumanArgs
 from backend.app.tools.registry import tool_schemas
@@ -182,10 +184,11 @@ def test_llm_outage_gives_safe_reply_and_next_turn_still_works(session, db_sessi
 
     assert first.reply == REPLY_UNAVAILABLE
     assert second.reply == "I'm back."
-    # Both caller messages reached the model; the history stayed valid.
+    # Both caller messages reached the model, and it learns what the caller
+    # heard in between (D74); the history stayed valid.
     assert [m["content"] for m in llm.requests[1]["messages"] if m["role"] == "user"] == [
         "hello?",
-        "hello again",
+        f'{NOTE_PREFIX}"{REPLY_UNAVAILABLE}"]\n\nhello again',
     ]
 
 
@@ -336,3 +339,67 @@ def test_a_turn_where_the_model_was_down_uses_up_the_payment_window(session, db_
 
     assert result.tool_calls == [ToolCallRecord("confirm_payment", False, "payment_expired")]
     assert payment_count(db_session) == 0
+
+
+# --- fixed replies the model didn't write (D74) -------------------------------
+
+
+def last_caller_message(llm: FakeLLM) -> str:
+    return [m for m in llm.requests[-1]["messages"] if m["role"] == "user"][-1]["content"]
+
+
+@pytest.mark.parametrize(
+    ("first_response", "fixed_reply"),
+    [
+        (LLMUnavailableError("timeout"), REPLY_UNAVAILABLE),
+        (FakeResponse(stop_reason="end_turn", content=[]), REPLY_EMPTY),
+        (FakeResponse(stop_reason="refusal", content=[TextBlock("partial")]), REPLY_CANNOT_HELP),
+    ],
+    ids=["unavailable", "empty", "cannot_help"],
+)
+def test_the_model_is_told_about_a_fixed_reply_once(session, db_session, first_response, fixed_reply) -> None:
+    llm = FakeLLM([first_response, say("Sorry about that."), say("ok")])
+    assert turn(session, db_session, llm, "first").reply == fixed_reply
+
+    turn(session, db_session, llm, "second")
+    assert last_caller_message(llm) == f'{NOTE_PREFIX}"{fixed_reply}"]\n\nsecond'
+    assert session.unheard_by_model == []
+
+    turn(session, db_session, llm, "third")
+    assert last_caller_message(llm) == "third"
+
+
+def test_a_normal_reply_leaves_no_note(session, db_session) -> None:
+    llm = FakeLLM([say("hi"), say("ok")])
+    turn(session, db_session, llm, "first")
+    turn(session, db_session, llm, "second")
+
+    assert last_caller_message(llm) == "second"
+    assert session.unheard_by_model == []
+
+
+@pytest.mark.parametrize("final", ["stuck", "turn_limit"])
+def test_nothing_is_noted_when_the_conversation_ends(session, db_session, monkeypatch, final) -> None:
+    if final == "stuck":
+        llm = FakeLLM([use((f"t{i}", "list_accounts", {})) for i in range(MAX_MODEL_CALLS)])
+    else:
+        monkeypatch.setattr(config, "MAX_CALLER_TURNS", 0)
+        llm = FakeLLM([])
+
+    result = turn(session, db_session, llm)
+
+    assert result.handed_off is True
+    assert session.unheard_by_model == []
+
+
+def test_only_the_last_few_fixed_replies_are_kept(session) -> None:
+    for number in range(MAX_UNHEARD_REPLIES + 2):
+        session.note_unheard(f"reply {number}")
+
+    assert MAX_UNHEARD_REPLIES == 3
+    assert session.unheard_by_model == ["reply 2", "reply 3", "reply 4"]
+
+
+def test_the_system_prompt_explains_the_note() -> None:
+    assert "bracketed note from CollectWise" in SYSTEM_PROMPT
+    assert NOTE_PREFIX.startswith("[Note from CollectWise")

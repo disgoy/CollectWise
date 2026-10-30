@@ -29,6 +29,8 @@ MAX_TRANSCRIPT_CHARS = 2000
 REPLY_NOT_UNDERSTOOD = "Sorry, I didn't catch that. Could you say it again?"
 REPLY_TOO_LONG = "Sorry, that was a lot at once. Could you say it more briefly?"
 REPLY_CANT_HEAR = "Sorry, I'm having trouble hearing right now. Please try again in a moment."
+# Outcomes where the caller hears one of the replies above instead of the agent.
+GUARD_OUTCOMES = {"stt_unavailable", "not_understood", "too_long"}
 
 
 @dataclass(frozen=True)
@@ -88,6 +90,11 @@ def run_voice_turn(
                 result = run_turn(session, transcript, llm=llm, db=db, system=system)
                 agent_ms = _elapsed_ms(started)
                 reply, outcome = result.reply, "reply"
+
+        if outcome in GUARD_OUTCOMES:
+            # The model never saw this reply; tell it on the next turn (D74).
+            with session.lock:
+                session.note_unheard(reply)
 
     started = time.perf_counter()
     try:

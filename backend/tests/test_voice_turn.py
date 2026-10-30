@@ -7,7 +7,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from backend.app import config
-from backend.app.agent.loop import REPLY_HANDED_OFF, REPLY_TURN_LIMIT
+from backend.app.agent.loop import NOTE_PREFIX, REPLY_HANDED_OFF, REPLY_TURN_LIMIT
 from backend.app.agent.sessions import ConversationSession, SessionStore
 from backend.app.db import models
 from backend.app.services import voice_metrics
@@ -346,3 +346,55 @@ def test_misheard_turns_dont_use_up_the_payment_window(session, db_session) -> N
 
     assert result.reply == "Your payment request is recorded."
     assert len(list(db_session.scalars(select(models.ServicingRequestRecord)))) == 1
+
+
+@pytest.mark.parametrize(
+    ("heard", "fixed_reply"),
+    [
+        (Transcript("pay fifty", 0.3), REPLY_NOT_UNDERSTOOD),
+        (Transcript("x" * (MAX_TRANSCRIPT_CHARS + 1), 0.95), REPLY_TOO_LONG),
+        (SpeechUnavailableError("timeout"), REPLY_CANT_HEAR),
+    ],
+    ids=["not_understood", "too_long", "stt_unavailable"],
+)
+def test_the_model_is_told_what_the_caller_heard_instead(
+    session, db_session, heard, fixed_reply
+) -> None:
+    llm = FakeLLM([say("Go ahead.")])
+    assert voice(session, db_session, stt=FakeSTT([heard]), llm=llm).reply == fixed_reply
+    assert llm.requests == []
+
+    voice(session, db_session, stt=FakeSTT([Transcript("Pay fifty dollars", 0.95)]), llm=llm)
+
+    assert caller_text_seen_by_model(llm) == f'{NOTE_PREFIX}"{fixed_reply}"]\n\nPay fifty dollars'
+
+
+def test_a_note_never_holds_the_misheard_words(session, db_session) -> None:
+    llm = FakeLLM([say("ok")])
+    for words in ("mumble one", "mumble two", "mumble three", "mumble four"):
+        voice(session, db_session, stt=FakeSTT([Transcript(words, 0.2)]), llm=llm)
+
+    voice(session, db_session, stt=FakeSTT([Transcript("hello", 0.95)]), llm=llm)
+
+    seen = caller_text_seen_by_model(llm)
+    assert "mumble" not in seen
+    three = "; ".join([f'"{REPLY_NOT_UNDERSTOOD}"'] * 3)
+    assert seen == f"{NOTE_PREFIX}{three}]\n\nhello"
+
+
+def test_nothing_is_noted_after_a_handoff(session, db_session) -> None:
+    session.state.handoff = object()  # any handoff
+
+    voice(session, db_session, stt=FakeSTT([]))
+
+    assert session.unheard_by_model == []
+
+
+def test_a_normal_spoken_turn_leaves_no_note(session, db_session) -> None:
+    llm = FakeLLM([say("Hello!"), say("Sure.")])
+    voice(session, db_session, stt=FakeSTT([Transcript("Hi", 0.95)]), llm=llm)
+
+    voice(session, db_session, stt=FakeSTT([Transcript("Thanks", 0.95)]), llm=llm)
+
+    assert llm.requests[-1]["messages"][-1]["content"] == "Thanks"
+    assert session.unheard_by_model == []

@@ -12,6 +12,11 @@ from backend.app.tools.base import CallerContext, ConversationState
 logger = logging.getLogger(__name__)
 
 
+# Automatic replies kept for the model's next turn (D74). Misheard voice turns
+# don't count towards the turn limit, so the list needs a cap of its own.
+MAX_UNHEARD_REPLIES = 3
+
+
 class SessionStoreFullError(Exception):
     """The server already holds as many conversations as it allows."""
 
@@ -28,10 +33,19 @@ class ConversationSession:
     lock: threading.Lock = field(default_factory=threading.Lock, repr=False, compare=False)
     # When the conversation was last used, on the store's clock.
     last_active: float = 0.0
+    # Fixed replies the caller got that the model never saw ("say that
+    # again", "try again"), oldest first (D74). Only our own texts, never
+    # the caller's words.
+    unheard_by_model: list[str] = field(default_factory=list)
 
     @property
     def session_id(self) -> str:
         return self.caller.session_id
+
+    def note_unheard(self, reply: str) -> None:
+        """Keep a fixed reply for the model's next turn. Call with `lock` held."""
+        self.unheard_by_model.append(reply)
+        del self.unheard_by_model[:-MAX_UNHEARD_REPLIES]
 
 
 class SessionStore:

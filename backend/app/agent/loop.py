@@ -36,6 +36,25 @@ REPLY_TURN_LIMIT = (
 )
 
 
+# Fixed replies the model should hear about on the next turn (D74). The rest
+# end the conversation, so the model never speaks again.
+UNHEARD_OUTCOMES = {"unavailable", "empty", "cannot_help"}
+NOTE_PREFIX = (
+    "[Note from CollectWise, not the caller: since your last reply the caller "
+    "was sent these automatic messages: "
+)
+
+
+def _with_note(session: ConversationSession, text: str) -> str:
+    """Prefix the caller's words with the fixed replies the model missed, and
+    clear them. One string, so history stays append-only and roles alternate."""
+    if not session.unheard_by_model:
+        return text
+    replies = "; ".join(f'"{reply}"' for reply in session.unheard_by_model)
+    session.unheard_by_model.clear()
+    return f"{NOTE_PREFIX}{replies}]\n\n{text}"
+
+
 @dataclass(frozen=True)
 class ToolCallRecord:
     name: str
@@ -128,6 +147,8 @@ def _run_turn(
 
     def finish(reply: str, outcome: str) -> TurnResult:
         record("turn_completed", outcome=outcome, latency_ms=_elapsed_ms(turn_started))
+        if outcome in UNHEARD_OUTCOMES:
+            session.note_unheard(reply)
         return TurnResult(
             reply=reply,
             handed_off=state.handoff is not None,
@@ -148,7 +169,7 @@ def _run_turn(
     # The only place a caller turn is counted (D24).
     state.start_caller_turn()
     record("turn_started")
-    session.messages.append({"role": "user", "content": text})
+    session.messages.append({"role": "user", "content": _with_note(session, text)})
 
     ctx = ToolContext(db=db, caller=session.caller, state=state)
     tools = tool_schemas()
