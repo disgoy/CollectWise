@@ -90,6 +90,8 @@ refuses paid runs until a person approves the harness with `--approve-harness`.
 | `COLLECTWISE_MAX_CALLER_TURNS` | `30` | Caller turns per conversation before it is handed to a person |
 | `COLLECTWISE_TURNS_PER_MINUTE` | `10` | Turns (typed and spoken together) per customer per minute; beyond it 429 |
 | `COLLECTWISE_SESSION_STARTS_PER_MINUTE` | `5` | New conversations per customer per minute; beyond it 429 |
+| `COLLECTWISE_PAYMENT_CONFIRM_TURNS` | `2` | A proposed payment can be confirmed only within this many further caller turns |
+| `COLLECTWISE_PAYMENT_CONFIRM_MINUTES` | `5` | ...and within this many minutes; after that the agent proposes it again |
 | `COLLECTWISE_VOICE_MIN_CONFIDENCE` | `0.6` | Voice turns heard with lower speech-to-text confidence get "say that again" instead of reaching the agent |
 
 To hear the voice turn end to end (real Deepgram and Claude, a few cents):

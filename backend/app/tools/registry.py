@@ -77,7 +77,10 @@ _SPECS = [
         description=(
             "Submit the pending payment request exactly as proposed. Only call it "
             "after the caller has clearly agreed in a later message. The request "
-            "is recorded for processing: say it was recorded, never that it was paid."
+            "is recorded for processing: say it was recorded, never that it was paid. "
+            "If it fails with payment_expired, tell the caller the request timed out "
+            "and offer to set it up again; if they want it, propose it again and read "
+            "it back."
         ),
         args_model=ConfirmPaymentArgs,
         function=confirm_payment,

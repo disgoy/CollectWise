@@ -26,6 +26,12 @@ MAX_CALLER_TURNS = int(os.environ.get("COLLECTWISE_MAX_CALLER_TURNS", "30"))
 TURNS_PER_MINUTE = int(os.environ.get("COLLECTWISE_TURNS_PER_MINUTE", "10"))
 SESSION_STARTS_PER_MINUTE = int(os.environ.get("COLLECTWISE_SESSION_STARTS_PER_MINUTE", "5"))
 
+# A proposed payment can be confirmed only while it's fresh (D73): within this
+# many further caller turns and minutes. After that the agent proposes it
+# again, which reads it back again.
+PAYMENT_CONFIRM_TURNS = int(os.environ.get("COLLECTWISE_PAYMENT_CONFIRM_TURNS", "2"))
+PAYMENT_CONFIRM_MINUTES = float(os.environ.get("COLLECTWISE_PAYMENT_CONFIRM_MINUTES", "5"))
+
 # The agent's LLM. Off unless explicitly set to "anthropic", so nothing calls
 # the API by accident (tests never set it).
 AGENT_LLM = os.environ.get("COLLECTWISE_AGENT_LLM")

@@ -6,7 +6,9 @@ from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from backend.app import config
 from backend.app.db import models
+from backend.app.tools import payments
 from backend.app.tools.base import ToolContext, ToolResult
 from backend.app.tools.payments import (
     CancelPaymentArgs,
@@ -16,6 +18,7 @@ from backend.app.tools.payments import (
     confirm_payment,
     propose_payment,
 )
+from backend.app.tools.registry import TOOLS
 from backend.tests.helpers import context_for, seed_customer
 
 
@@ -270,3 +273,120 @@ def test_confirm_takes_no_arguments() -> None:
 def test_propose_args_reject_invalid_input(bad_args: dict) -> None:
     with pytest.raises(ValidationError):
         ProposePaymentArgs(**bad_args)
+
+
+# --- expiry (D73) -------------------------------------------------------------
+
+
+class Clock:
+    def __init__(self) -> None:
+        self.now = 10_000.0
+
+    def __call__(self) -> float:
+        return self.now
+
+
+@pytest.fixture
+def clock(monkeypatch) -> Clock:
+    fake = Clock()
+    monkeypatch.setattr(payments, "_now", fake)
+    return fake
+
+
+def later_turns(ctx: ToolContext, count: int) -> None:
+    for _ in range(count):
+        ctx.state.start_caller_turn()
+
+
+EXPIRED_120 = ToolResult.failure("payment_expired", account_id="acct_a_1", amount="120.00", currency="USD")
+
+
+def test_shipped_window_is_two_turns_and_five_minutes() -> None:
+    assert (config.PAYMENT_CONFIRM_TURNS, config.PAYMENT_CONFIRM_MINUTES) == (2, 5)
+
+
+@pytest.mark.parametrize("turns_later", [1, 2])
+def test_confirm_within_two_later_turns_works(ctx, clock, turns_later) -> None:
+    propose(ctx, "120.00")
+    later_turns(ctx, turns_later)
+
+    assert confirm(ctx).ok
+    assert len(payment_records(ctx.db)) == 1
+
+
+def test_confirm_three_turns_later_has_expired(ctx, clock) -> None:
+    propose(ctx, "120.00")
+    later_turns(ctx, 3)
+
+    assert confirm(ctx) == EXPIRED_120
+    assert payment_records(ctx.db) == []
+    assert ctx.state.pending_payment is None
+    assert confirm(ctx) == ToolResult.failure("no_pending_payment")
+
+
+@pytest.mark.parametrize(("seconds", "expired"), [(299.9, False), (300, True)])
+def test_five_minutes_after_the_proposal_it_has_expired(ctx, clock, seconds, expired) -> None:
+    propose(ctx, "120.00")
+    later_turns(ctx, 1)
+    clock.now += seconds
+
+    result = confirm(ctx)
+
+    assert (result == EXPIRED_120) is expired
+    assert len(payment_records(ctx.db)) == (0 if expired else 1)
+
+
+def test_an_expired_payment_is_never_checked_against_the_policy(ctx, clock) -> None:
+    # Even an amount the policy would now deny reports only that it expired.
+    propose(ctx, "120.00")
+    ctx.db.get(models.AccountRecord, "acct_a_1").status = "frozen"
+    ctx.db.commit()
+    later_turns(ctx, 3)
+
+    assert confirm(ctx) == EXPIRED_120
+    assert ctx.db.scalars(select(models.ServicingAuditEvent)).all() == []
+
+
+def test_a_new_proposal_after_expiry_needs_its_own_later_turn(ctx, clock) -> None:
+    propose(ctx, "120.00")
+    later_turns(ctx, 3)
+    confirm(ctx)
+
+    propose(ctx, "120.00")
+    assert confirm(ctx) == ToolResult.failure("confirmation_required")
+    later_turns(ctx, 1)
+    assert confirm(ctx).ok
+
+
+def test_a_submitted_payment_still_replays_after_the_window(ctx, clock) -> None:
+    propose(ctx, "120.00")
+    later_turns(ctx, 1)
+    first = confirm(ctx)
+    later_turns(ctx, 5)
+    clock.now += 3600
+
+    again = confirm(ctx)
+
+    assert again.data == {**first.data, "replayed": True}
+    assert len(payment_records(ctx.db)) == 1
+
+
+def test_the_window_is_read_at_call_time(ctx, clock, monkeypatch) -> None:
+    propose(ctx, "120.00")
+    later_turns(ctx, 1)
+    monkeypatch.setattr(config, "PAYMENT_CONFIRM_MINUTES", 0.5)
+    clock.now += 30
+
+    assert confirm(ctx) == EXPIRED_120
+
+    propose(ctx, "120.00")
+    later_turns(ctx, 1)
+    monkeypatch.setattr(config, "PAYMENT_CONFIRM_TURNS", 0)
+    assert confirm(ctx) == EXPIRED_120
+
+
+def test_the_model_is_told_what_to_do_with_an_expired_payment() -> None:
+    description = TOOLS["confirm_payment"].description
+
+    assert "payment_expired" in description
+    assert "propose it again" in description

@@ -28,6 +28,8 @@ class PendingPayment:
     currency: str
     # The caller turn in which the payment was proposed.
     proposed_turn: int
+    # When it was proposed, on the monotonic clock (D73).
+    proposed_at: float
     submitted: bool = False
 
 

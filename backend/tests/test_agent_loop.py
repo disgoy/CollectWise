@@ -317,3 +317,22 @@ def test_the_model_cannot_choose_the_turn_limit_reason() -> None:
     reasons = HandoffToHumanArgs.model_json_schema()["properties"]["reason"]["enum"]
 
     assert "turn_limit" not in reasons
+
+
+def test_a_turn_where_the_model_was_down_uses_up_the_payment_window(session, db_session) -> None:
+    # Outage turns are real caller turns (the caller spoke); the two-turn
+    # window allows one retry, not two (D73).
+    propose = ("t1", "propose_payment", {"account_id": "acct_a_1", "amount": "120.00"})
+    llm = FakeLLM([
+        use(propose), say("120 USD. Shall I submit it?"),
+        LLMUnavailableError("timeout"), LLMUnavailableError("timeout"),
+        use(("t2", "confirm_payment", {})), say("That request timed out."),
+    ])
+    turn(session, db_session, llm, "pay 120")
+    assert turn(session, db_session, llm, "yes").reply == REPLY_UNAVAILABLE
+    assert turn(session, db_session, llm, "yes").reply == REPLY_UNAVAILABLE
+
+    result = turn(session, db_session, llm, "yes")
+
+    assert result.tool_calls == [ToolCallRecord("confirm_payment", False, "payment_expired")]
+    assert payment_count(db_session) == 0

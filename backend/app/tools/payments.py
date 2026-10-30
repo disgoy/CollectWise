@@ -1,9 +1,11 @@
+import time
 from dataclasses import replace
 from decimal import Decimal
 from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from backend.app import config
 from backend.app.policies.servicing import PolicyDecision
 from backend.app.schemas.domain import ServicingOperation, ServicingRequest
 from backend.app.services.servicing import (
@@ -17,6 +19,11 @@ from backend.app.tools.base import (
     ToolResult,
     caller_facing_reason,
 )
+
+
+def _now() -> float:
+    # A seam for tests.
+    return time.monotonic()
 
 
 def _payment_request(
@@ -86,6 +93,7 @@ def propose_payment(ctx: ToolContext, args: ProposePaymentArgs) -> ToolResult:
         amount=args.amount,
         currency=preview.currency,
         proposed_turn=ctx.state.turn,
+        proposed_at=_now(),
     )
     # A new proposal replaces any earlier one, submitted or not.
     ctx.state.pending_payment = pending
@@ -113,6 +121,20 @@ def confirm_payment(ctx: ToolContext, args: ConfirmPaymentArgs) -> ToolResult:
     # be submitted before the caller has heard it.
     if not pending.submitted and ctx.state.turn <= pending.proposed_turn:
         return ToolResult.failure("confirmation_required")
+
+    # ...and recently, so a late "yes" about something else can't submit a
+    # proposal the caller has forgotten (D73). Submitted ones only replay.
+    if not pending.submitted and (
+        ctx.state.turn - pending.proposed_turn > config.PAYMENT_CONFIRM_TURNS
+        or _now() - pending.proposed_at >= config.PAYMENT_CONFIRM_MINUTES * 60
+    ):
+        ctx.state.pending_payment = None
+        return ToolResult.failure(
+            "payment_expired",
+            account_id=pending.account_id,
+            amount=str(pending.amount),
+            currency=pending.currency,
+        )
 
     try:
         decision = evaluate_servicing_request(

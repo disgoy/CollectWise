@@ -329,3 +329,20 @@ def test_a_spoken_turn_past_the_limit_is_handed_off(session, db_session, monkeyp
 
     # From then on nothing is transcribed (D63): the script has no more lines.
     assert voice(session, db_session, stt=stt).reply == REPLY_HANDED_OFF
+
+
+def test_misheard_turns_dont_use_up_the_payment_window(session, db_session) -> None:
+    llm = FakeLLM([
+        use(("t1", "propose_payment", {"account_id": "acct_a_1", "amount": "120"})),
+        say("120.00 USD from your account. Shall I go ahead?"),
+        use(("t2", "confirm_payment", {})),
+        say("Your payment request is recorded."),
+    ])
+    voice(session, db_session, stt=FakeSTT([Transcript("Pay 120 please", 0.95)]), llm=llm)
+    for _ in range(4):
+        voice(session, db_session, stt=FakeSTT([Transcript("mmhm", 0.2)]), llm=llm)
+
+    result = voice(session, db_session, stt=FakeSTT([Transcript("Yes, go ahead", 0.97)]), llm=llm)
+
+    assert result.reply == "Your payment request is recorded."
+    assert len(list(db_session.scalars(select(models.ServicingRequestRecord)))) == 1
