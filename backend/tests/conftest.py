@@ -12,6 +12,8 @@ os.environ["COLLECTWISE_DATABASE_URL"] = f"sqlite:///{_test_db_dir}/app.db"
 os.environ["COLLECTWISE_SESSION_SECRET"] = "test-only-session-secret-0123456789abcdef"
 # Tests must never reach the real model API, whatever the developer's shell has.
 os.environ.pop("COLLECTWISE_AGENT_LLM", None)
+# Likewise for speech: tests never call Deepgram.
+os.environ.pop("COLLECTWISE_SPEECH", None)
 
 from collections.abc import Generator  # noqa: E402
 

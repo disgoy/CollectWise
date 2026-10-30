@@ -22,3 +22,9 @@ AGENT_EFFORT = os.environ.get("COLLECTWISE_AGENT_EFFORT", "medium")
 # again" instead of reaching the agent (D60). A starting guess, to be tuned
 # with measured confidence values (4.7).
 VOICE_MIN_CONFIDENCE = float(os.environ.get("COLLECTWISE_VOICE_MIN_CONFIDENCE", "0.5"))
+
+# Speech services. Off unless explicitly set to "deepgram", so nothing calls
+# Deepgram by accident (tests remove it). The key is DEEPGRAM_API_KEY.
+SPEECH_PROVIDER = os.environ.get("COLLECTWISE_SPEECH")
+STT_MODEL = os.environ.get("COLLECTWISE_STT_MODEL", "nova-3")
+TTS_VOICE = os.environ.get("COLLECTWISE_TTS_VOICE", "aura-2-thalia-en")

@@ -21,6 +21,12 @@ from backend.app.services.conversation_events import (
 )
 from backend.app.services.customers import customer_exists
 from backend.app.voice.audio import MAX_WAV_BYTES, AudioFormatError, read_wav, write_wav
+from backend.app.voice.deepgram import (
+    DeepgramSTT,
+    DeepgramTTS,
+    build_deepgram_speech,
+    deepgram_configured,
+)
 from backend.app.voice.speech import SpeechToText, TextToSpeech
 from backend.app.voice.turn import run_voice_turn
 
@@ -46,13 +52,25 @@ def get_llm() -> LLMClient:
     return _claude_client(config.AGENT_MODEL, config.AGENT_EFFORT)
 
 
+@lru_cache(maxsize=1)
+def _deepgram_speech(stt_model: str, tts_voice: str) -> tuple[DeepgramSTT, DeepgramTTS]:
+    return build_deepgram_speech(stt_model=stt_model, tts_voice=tts_voice)
+
+
+def _speech() -> tuple[DeepgramSTT, DeepgramTTS]:
+    # Off unless COLLECTWISE_SPEECH=deepgram and a key is set. Tests override
+    # get_stt / get_tts with fakes.
+    if config.SPEECH_PROVIDER != "deepgram" or not deepgram_configured():
+        raise HTTPException(status_code=503, detail="Voice is not configured")
+    return _deepgram_speech(config.STT_MODEL, config.TTS_VOICE)
+
+
 def get_stt() -> SpeechToText:
-    # The real provider arrives in 4.6. Tests override this with a fake.
-    raise HTTPException(status_code=503, detail="Voice is not configured")
+    return _speech()[0]
 
 
 def get_tts() -> TextToSpeech:
-    raise HTTPException(status_code=503, detail="Voice is not configured")
+    return _speech()[1]
 
 
 class SessionCreatedResponse(BaseModel):

@@ -77,7 +77,14 @@ refuses paid runs until a person approves the harness with `--approve-harness`.
 | `COLLECTWISE_AGENT_MODEL` | `claude-sonnet-5-5` | Model used by the agent |
 | `COLLECTWISE_AGENT_EFFORT` | `medium` | Model effort level |
 | `ANTHROPIC_API_KEY` | none | Anthropic credentials |
+| `COLLECTWISE_SPEECH` | unset (voice off) | Set to `deepgram` to enable real, paid speech-to-text and text-to-speech |
+| `COLLECTWISE_STT_MODEL` | `nova-3` | Deepgram speech-to-text model |
+| `COLLECTWISE_TTS_VOICE` | `aura-2-thalia-en` | Deepgram voice for spoken replies |
+| `DEEPGRAM_API_KEY` | none | Deepgram credentials |
 | `COLLECTWISE_VOICE_MIN_CONFIDENCE` | `0.5` | Voice turns heard with lower speech-to-text confidence get "say that again" instead of reaching the agent |
+
+To hear the voice turn end to end (real Deepgram and Claude, a few cents):
+`COLLECTWISE_AGENT_LLM=anthropic COLLECTWISE_SPEECH=deepgram python -m scripts.smoke_voice`.
 
 Local secrets go in a git-ignored `.env` (template: `.env.example`). The app
 does not read it itself; load it into your shell with `set -a; source .env; set +a`.
