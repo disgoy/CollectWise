@@ -108,7 +108,10 @@ def test_an_odd_host_header_is_not_echoed_into_the_policy() -> None:
     assert "connect-src 'self';" in content_security_policy("evil.com; script-src *")
 
 
-@pytest.mark.parametrize("name", ["app.mjs", "audio.mjs", "playback.mjs", "capture-worklet.js", "live.css"])
+PAGE_FILES = ["app.mjs", "audio.mjs", "playback.mjs", "timeline.mjs", "capture-worklet.js", "live.css"]
+
+
+@pytest.mark.parametrize("name", PAGE_FILES)
 def test_the_page_files_are_served(client, name) -> None:
     assert client.get(f"/live/static/{name}").status_code == 200
 
@@ -135,3 +138,10 @@ def test_the_page_logic_passes_its_node_tests() -> None:
         ["node", "--test", "backend/tests/js/"], cwd=REPO, capture_output=True, text=True, timeout=60,
     )
     assert result.returncode == 0, result.stdout[-3000:]
+
+
+def test_the_page_has_a_call_clock_and_a_copy_button(client) -> None:
+    page = client.get("/live").text
+
+    assert 'id="clock"' in page
+    assert 'id="copy"' in page

@@ -85,5 +85,7 @@ ol#conversation { list-style: none; margin: 0; padding: 0; }
 ol#conversation li { padding: 0.5rem 0.75rem; border-radius: 8px; margin-bottom: 0.5rem; }
 li.caller { background: var(--caller); }
 li.agent { background: var(--agent); }
-li.cut::after { content: " (interrupted)"; color: var(--muted); font-size: 0.85rem; }
-li .who { display: block; font-size: 0.8rem; color: var(--muted); }
+li .who { display: block; font-size: 0.8rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+li .cut { color: var(--danger); font-size: 0.85rem; }
+.controls { display: flex; align-items: center; flex-wrap: wrap; }
+.clock { margin-left: auto; font-size: 1.25rem; font-weight: 600; font-variant-numeric: tabular-nums; }

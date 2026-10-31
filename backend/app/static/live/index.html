@@ -32,6 +32,7 @@
       <div class="controls">
         <button id="start" type="button" disabled>Start call</button>
         <button id="hang-up" type="button" disabled>Hang up</button>
+        <span id="clock" class="clock" aria-label="Call time">0:00</span>
       </div>
       <p id="status" class="status" role="status" aria-live="polite">Sign in to start.</p>
       <p id="caption" class="caption" aria-live="polite"></p>
@@ -39,7 +40,9 @@
 
     <section aria-labelledby="conversation-title">
       <h2 id="conversation-title">Conversation</h2>
+      <p class="note">Times are from the moment the call connected. "Replied after" is measured in this browser, from when the agent decided you had finished to when its voice started playing.</p>
       <ol id="conversation" aria-live="polite"></ol>
+      <button id="copy" type="button" class="secondary" disabled>Copy transcript with timings</button>
     </section>
   </main>
 </body>

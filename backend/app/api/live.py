@@ -38,6 +38,7 @@ from backend.app.voice.live_call import (
     AgentSentence,
     CallEnded,
     CallerSaid,
+    CallerSpeaking,
     Caption,
     PlaybackStopped,
     ReplyDone,
@@ -71,6 +72,7 @@ AUDIO_SLACK_S = 2.0
 AUDIO_HEADER = struct.Struct("<II")
 
 _EVENT_TYPES = {
+    CallerSpeaking: "caller_speaking",
     Caption: "caption",
     CallerSaid: "caller_said",
     AgentSentence: "agent_sentence",

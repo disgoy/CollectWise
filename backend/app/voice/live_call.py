@@ -65,6 +65,11 @@ WATCHDOG_TICK_S = 1.0
 
 
 @dataclass(frozen=True)
+class CallerSpeaking:
+    """The listener heard the caller start a turn (for the page's timeline)."""
+
+
+@dataclass(frozen=True)
 class Caption:
     """The caller's words so far in this turn."""
 
@@ -124,7 +129,10 @@ class CallEnded:
     reason: str
 
 
-CallEvent = Caption | CallerSaid | AgentSentence | AgentAudio | SegmentEnd | StopPlayback | ReplyDone | CallEnded
+CallEvent = (
+    CallerSpeaking | Caption | CallerSaid | AgentSentence | AgentAudio
+    | SegmentEnd | StopPlayback | ReplyDone | CallEnded
+)
 
 
 # --- what the caller's app sends besides audio ---------------------------------
@@ -254,7 +262,9 @@ class _LiveCall:
         try:
             async for event in listener.events():
                 words = event.text.strip()
-                if event.kind == "update" and words:
+                if event.kind == "speech_started":
+                    await self._link.send(CallerSpeaking())
+                elif event.kind == "update" and words:
                     self._last_activity = self._clock()
                     await self._link.send(Caption(words))
                     await self._maybe_interrupt(words)

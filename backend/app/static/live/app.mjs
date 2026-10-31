@@ -4,6 +4,7 @@
 
 import { CALLER_RATE, Framer, Resampler, floatToPcm16, parseAudioFrame } from "./audio.mjs";
 import { PlaybackTracker } from "./playback.mjs";
+import { CallTimeline, formatClock, formatDuration } from "./timeline.mjs";
 
 const CLOSE_MESSAGES = {
   1000: "Call ended.",
@@ -33,6 +34,7 @@ const $ = (id) => document.getElementById(id);
 
 let token = null; // in memory only
 let call = null;
+let lastTimeline = null; // the most recent call's timeline, for copying
 
 function setStatus(text, { error = false } = {}) {
   $("status").textContent = text;
@@ -123,10 +125,12 @@ function makeScheduler(context) {
       source.connect(context.destination);
       next = Math.max(next, context.currentTime + 0.02);
       source.start(next);
+      const startsIn = next - context.currentTime; // seconds from now
       next += buffer.duration;
       const callbacks = [];
       source.onended = () => callbacks.forEach((callback) => callback());
       return {
+        startsIn,
         stop() {
           try {
             source.stop();
@@ -147,41 +151,42 @@ function makeScheduler(context) {
 
 class Conversation {
   constructor() {
-    this.replies = new Map();
+    $("conversation").replaceChildren();
+    this.items = new Map(); // timeline entry -> list item
   }
 
-  caller(text) {
-    this.add("caller", "You", text);
-  }
-
-  agentSentence(reply, text) {
-    let item = this.replies.get(reply);
+  // Show (or refresh) one timeline entry.
+  show(entry) {
+    let item = this.items.get(entry);
     if (!item) {
-      item = this.add("agent", "Agent", "");
-      this.replies.set(reply, item);
+      item = document.createElement("li");
+      item.className = entry.who;
+      const label = document.createElement("span");
+      label.className = "who";
+      const body = document.createElement("span");
+      body.className = "text";
+      item.append(label, body);
+      $("conversation").append(item);
+      this.items.set(entry, item);
     }
-    const body = item.querySelector(".text");
-    body.textContent = body.textContent ? `${body.textContent} ${text}` : text;
-  }
-
-  interrupted(reply) {
-    this.replies.get(reply)?.classList.add("cut");
-  }
-
-  add(kind, who, text) {
-    const item = document.createElement("li");
-    item.className = kind;
-    const label = document.createElement("span");
-    label.className = "who";
-    label.textContent = who;
-    const body = document.createElement("span");
-    body.className = "text";
-    body.textContent = text;
-    item.append(label, body);
-    $("conversation").append(item);
+    item.querySelector(".who").textContent = describe(entry);
+    item.querySelector(".text").textContent = entry.text;
+    let cut = item.querySelector(".cut");
+    if (entry.interruptedAt !== undefined && entry.interruptedAt !== null && !cut) {
+      cut = document.createElement("span");
+      cut.className = "cut";
+      item.append(cut);
+    }
+    if (cut) cut.textContent = ` (interrupted at ${formatClock(entry.interruptedAt)})`;
     item.scrollIntoView({ block: "nearest" });
-    return item;
   }
+}
+
+function describe(entry) {
+  if (entry.who === "caller") return `${formatClock(entry.from)}-${formatClock(entry.to)} · You`;
+  const at = entry.at === null ? "text only" : formatClock(entry.at);
+  const delay = entry.delay === null ? "" : ` · replied ${(entry.delay / 1000).toFixed(1)} s after you finished`;
+  return `${at} · Agent${delay}`;
 }
 
 async function startCall() {
@@ -219,8 +224,18 @@ function openCall(sessionId, context, microphone) {
     if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify(message));
   };
   const scheduler = makeScheduler(context);
-  const playback = new PlaybackTracker({ schedule: scheduler.schedule, send, reset: scheduler.reset });
+  let startsIn = 0; // when the chunk just scheduled will start playing, in seconds
+  const schedule = (samples, sampleRate) => {
+    const chunk = scheduler.schedule(samples, sampleRate);
+    startsIn = chunk.startsIn;
+    return chunk;
+  };
+  const playback = new PlaybackTracker({ schedule, send, reset: scheduler.reset });
   const conversation = new Conversation();
+  const timeline = new CallTimeline();
+  lastTimeline = timeline;
+  $("copy").disabled = true;
+  let clockTimer = null;
   let outputRate = 24000;
   let ready = false;
 
@@ -242,7 +257,9 @@ function openCall(sessionId, context, microphone) {
   socket.onmessage = (event) => {
     if (event.data instanceof ArrayBuffer) {
       const frame = parseAudioFrame(event.data);
+      startsIn = null;
       playback.audio(frame.reply, frame.segment, frame.samples, outputRate);
+      if (startsIn !== null) conversation.show(timeline.agentAudioStarts(frame.reply, startsIn * 1000));
       setStatus("Agent speaking...");
       return;
     }
@@ -251,25 +268,32 @@ function openCall(sessionId, context, microphone) {
       case "ready":
         ready = true;
         outputRate = message.sample_rate_out;
+        timeline.start();
+        clockTimer = setInterval(() => {
+          $("clock").textContent = formatDuration(timeline.elapsed());
+        }, 250);
         $("hang-up").disabled = false;
         setStatus("Listening. Go ahead and speak.");
+        break;
+      case "caller_speaking":
+        timeline.callerSpeaking();
         break;
       case "caption":
         $("caption").textContent = message.text;
         break;
       case "caller_said":
         $("caption").textContent = "";
-        conversation.caller(message.text);
+        conversation.show(timeline.callerSaid(message.text));
         break;
       case "agent_sentence":
-        conversation.agentSentence(message.reply, message.text);
+        conversation.show(timeline.agentSentence(message.reply, message.text));
         break;
       case "segment_end":
         playback.segmentEnd(message.reply, message.segment);
         break;
       case "stop_playback":
         playback.stop(message.reply);
-        conversation.interrupted(message.reply);
+        conversation.show(timeline.interrupted(message.reply));
         setStatus("Listening.");
         break;
       case "reply_done":
@@ -285,6 +309,10 @@ function openCall(sessionId, context, microphone) {
 
   socket.onclose = (event) => {
     ready = false;
+    timeline.end();
+    clearInterval(clockTimer);
+    $("clock").textContent = formatDuration(timeline.elapsed());
+    $("copy").disabled = false;
     microphone.getTracks().forEach((track) => track.stop());
     context.close();
     $("hang-up").disabled = true;
@@ -301,4 +329,13 @@ function openCall(sessionId, context, microphone) {
 $("use-token").addEventListener("click", useToken);
 $("start").addEventListener("click", startCall);
 $("hang-up").addEventListener("click", () => call?.hangUp());
+$("copy").addEventListener("click", async () => {
+  if (!lastTimeline) return;
+  try {
+    await navigator.clipboard.writeText(lastTimeline.toText());
+    setStatus("Transcript copied.");
+  } catch {
+    setStatus("Couldn't copy: the browser blocked the clipboard.", { error: true });
+  }
+});
 loadDemoCustomers();

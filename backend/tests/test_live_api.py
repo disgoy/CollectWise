@@ -23,6 +23,7 @@ from backend.app.voice.live_call import (
     AgentSentence,
     CallEnded,
     CallerSaid,
+    CallerSpeaking,
     Caption,
     PlaybackStopped,
     ReplyDone,
@@ -112,7 +113,7 @@ def test_a_call_over_the_websocket(live_api) -> None:
         ws.send_text(json.dumps({"type": "hang_up"}))
         after = until(ws, is_close)
 
-    assert {"type": "caption", "text": "What's my balance?"} in during
+    assert during.index({"type": "caller_speaking"}) < during.index({"type": "caption", "text": "What's my balance?"})
     assert {"type": "caller_said", "text": "What's my balance?"} in during
     sentence = {"type": "agent_sentence", "reply": 0, "sentence": 0, "text": "Your main account has 500 US dollars."}
     assert sentence in during
@@ -313,6 +314,7 @@ def test_unknown_messages_are_ignored(live_api) -> None:
 
 
 def test_every_event_has_a_wire_form() -> None:
+    assert json.loads(encode_event(CallerSpeaking())) == {"type": "caller_speaking"}
     assert json.loads(encode_event(Caption("hi"))) == {"type": "caption", "text": "hi"}
     assert json.loads(encode_event(CallerSaid("hi"))) == {"type": "caller_said", "text": "hi"}
     assert json.loads(encode_event(AgentSentence(1, 4, "Hello."))) == {

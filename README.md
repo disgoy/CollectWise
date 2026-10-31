@@ -170,7 +170,7 @@ server sends `{"type": "ready", "sample_rate_in": 16000, "sample_rate_out": 2400
   `{"type": "segment_played", "reply", "segment"}` when a segment has played;
   `{"type": "playback_stopped", "reply", "played": [...]}` after a stop;
   `{"type": "hang_up"}`. Unknown types are ignored.
-- Server to caller: `caption`, `caller_said`, `agent_sentence`, `segment_end`,
+- Server to caller: `caller_speaking` (the listener heard the caller begin), `caption`, `caller_said`, `agent_sentence`, `segment_end`,
   `stop_playback`, `reply_done`, `call_ended` as JSON; audio as binary frames
   with an 8-byte header (reply, segment as little-endian uint32) followed by
   24 kHz PCM.

@@ -138,7 +138,8 @@ def test_a_turn_from_speech_to_spoken_reply(db_factory) -> None:
     assert call.listener.audio == [b"\x01\x00" * 1280]
     assert call.speaker.said == ["Your main account has 500 US dollars.", "Anything else?"]
     kinds = [type(e).__name__ for e in call.link.events]
-    assert kinds[:2] == ["Caption", "CallerSaid"]
+    # Flux's StartOfTurn comes first: the page starts the turn's clock (D88).
+    assert kinds[:3] == ["CallerSpeaking", "Caption", "CallerSaid"]
     assert call.link.of(Caption) == [Caption("What's my balance?")]
     assert call.link.of(CallerSaid) == [CallerSaid("What's my balance?")]
     assert call.link.of(AgentSentence) == [
