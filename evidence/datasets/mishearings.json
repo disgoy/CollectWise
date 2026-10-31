@@ -1,0 +1,110 @@
+[
+ {
+  "clip": "amount_a_hundred_and_twenty · your voice · clean",
+  "phrase": "amount_a_hundred_and_twenty",
+  "voice": "your voice",
+  "noise_db": null,
+  "expected": "120",
+  "heard": "20",
+  "confidence": 1.0
+ },
+ {
+  "clip": "amount_dollars_and_cents · amalthea · clean",
+  "phrase": "amount_dollars_and_cents",
+  "voice": "amalthea",
+  "noise_db": null,
+  "expected": "125.50",
+  "heard": "135.5",
+  "confidence": 1.0
+ },
+ {
+  "clip": "amount_dollars_and_cents · amalthea · 20 dB",
+  "phrase": "amount_dollars_and_cents",
+  "voice": "amalthea",
+  "noise_db": 20,
+  "expected": "125.50",
+  "heard": "135.5",
+  "confidence": 1.0
+ },
+ {
+  "clip": "amount_dollars_and_cents · amalthea · 10 dB",
+  "phrase": "amount_dollars_and_cents",
+  "voice": "amalthea",
+  "noise_db": 10,
+  "expected": "125.50",
+  "heard": "135.5",
+  "confidence": 1.0
+ },
+ {
+  "clip": "amount_dollars_and_cents · amalthea · 5 dB",
+  "phrase": "amount_dollars_and_cents",
+  "voice": "amalthea",
+  "noise_db": 5,
+  "expected": "125.50",
+  "heard": "135.5",
+  "confidence": 1.0
+ },
+ {
+  "clip": "label_current · draco · 10 dB",
+  "phrase": "label_current",
+  "voice": "draco",
+  "noise_db": 10,
+  "expected": "current",
+  "heard": "none",
+  "confidence": 0.92
+ },
+ {
+  "clip": "confirm_no · draco · 20 dB",
+  "phrase": "confirm_no",
+  "voice": "draco",
+  "noise_db": 20,
+  "expected": "no",
+  "heard": "none",
+  "confidence": 0.88
+ },
+ {
+  "clip": "label_current · draco · 5 dB",
+  "phrase": "label_current",
+  "voice": "draco",
+  "noise_db": 5,
+  "expected": "current",
+  "heard": "none",
+  "confidence": 0.87
+ },
+ {
+  "clip": "confirm_no · your voice · clean",
+  "phrase": "confirm_no",
+  "voice": "your voice",
+  "noise_db": null,
+  "expected": "no",
+  "heard": "none",
+  "confidence": 0.7
+ },
+ {
+  "clip": "amount_thirteen · amalthea · 5 dB",
+  "phrase": "amount_thirteen",
+  "voice": "amalthea",
+  "noise_db": 5,
+  "expected": "13",
+  "heard": "15",
+  "confidence": 0.59
+ },
+ {
+  "clip": "amount_thirty · draco · 5 dB",
+  "phrase": "amount_thirty",
+  "voice": "draco",
+  "noise_db": 5,
+  "expected": "30",
+  "heard": "none",
+  "confidence": 0.52
+ },
+ {
+  "clip": "confirm_no · your voice · 10 dB",
+  "phrase": "confirm_no",
+  "voice": "your voice",
+  "noise_db": 10,
+  "expected": "no",
+  "heard": "none",
+  "confidence": 0.0
+ }
+]

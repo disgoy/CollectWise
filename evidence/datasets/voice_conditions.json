@@ -1,0 +1,32 @@
+[
+ {
+  "condition": "synthetic voices, clean",
+  "correct": 44,
+  "total": 45
+ },
+ {
+  "condition": "synthetic voices, noise 10 dB",
+  "correct": 43,
+  "total": 45
+ },
+ {
+  "condition": "synthetic voices, noise 20 dB",
+  "correct": 43,
+  "total": 45
+ },
+ {
+  "condition": "synthetic voices, noise 5 dB",
+  "correct": 41,
+  "total": 45
+ },
+ {
+  "condition": "your voice, clean",
+  "correct": 13,
+  "total": 15
+ },
+ {
+  "condition": "your voice, noise 10 dB",
+  "correct": 14,
+  "total": 15
+ }
+]

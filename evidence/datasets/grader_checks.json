@@ -1,0 +1,20 @@
+[
+ {
+  "agent": "oracle",
+  "all_pass": 100.0,
+  "outcome": 100.0,
+  "compliance": 100.0,
+  "quality": 100.0,
+  "payments": 100.0,
+  "handoff": 100.0
+ },
+ {
+  "agent": "null",
+  "all_pass": 0.0,
+  "outcome": 64.0,
+  "compliance": 100.0,
+  "quality": 0.0,
+  "payments": 80.0,
+  "handoff": 84.0
+ }
+]

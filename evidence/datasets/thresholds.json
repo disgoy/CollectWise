@@ -1,0 +1,37 @@
+[
+ {
+  "threshold": 0.3,
+  "blocked_correct": 0,
+  "passed_wrong": 11
+ },
+ {
+  "threshold": 0.4,
+  "blocked_correct": 0,
+  "passed_wrong": 11
+ },
+ {
+  "threshold": 0.5,
+  "blocked_correct": 0,
+  "passed_wrong": 11
+ },
+ {
+  "threshold": 0.6,
+  "blocked_correct": 0,
+  "passed_wrong": 9
+ },
+ {
+  "threshold": 0.7,
+  "blocked_correct": 0,
+  "passed_wrong": 8
+ },
+ {
+  "threshold": 0.8,
+  "blocked_correct": 3,
+  "passed_wrong": 8
+ },
+ {
+  "threshold": 0.9,
+  "blocked_correct": 10,
+  "passed_wrong": 6
+ }
+]

@@ -1,0 +1,35 @@
+[
+ {
+  "version": "baseline",
+  "change": "First measured version (M3)",
+  "conversations": 50,
+  "all_pass": 70.0,
+  "outcome": 100.0,
+  "compliance": 96.0,
+  "quality": 74.0,
+  "payments": 100.0,
+  "handoff": 100.0
+ },
+ {
+  "version": "v1",
+  "change": "Tools stop returning request IDs (D55)",
+  "conversations": 50,
+  "all_pass": 96.0,
+  "outcome": 100.0,
+  "compliance": 100.0,
+  "quality": 96.0,
+  "payments": 100.0,
+  "handoff": 100.0
+ },
+ {
+  "version": "v2",
+  "change": "Spoken account names; account IDs never said (D58, D65)",
+  "conversations": 50,
+  "all_pass": 98.0,
+  "outcome": 100.0,
+  "compliance": 100.0,
+  "quality": 98.0,
+  "payments": 100.0,
+  "handoff": 100.0
+ }
+]

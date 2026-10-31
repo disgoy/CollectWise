@@ -1,0 +1,16 @@
+[
+ {
+  "group": "heard right",
+  "min": 0.75,
+  "median": 1.0,
+  "max": 1.0,
+  "n": 198
+ },
+ {
+  "group": "heard wrong",
+  "min": 0.0,
+  "median": 0.9,
+  "max": 1.0,
+  "n": 12
+ }
+]

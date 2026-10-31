@@ -1,0 +1,434 @@
+{
+  "_about": "Hand-curated, public-safe facts for the evidence report, taken from the project's decision log (docs/PROGRESS.md, kept private). Numbers measured from files outside the repo (conversation transcripts) are recorded here with their decision number.",
+  "tests_over_time": [
+    {
+      "step": "foundation",
+      "tests": 51
+    },
+    {
+      "step": "M1",
+      "tests": 60
+    },
+    {
+      "step": "M1.5",
+      "tests": 71
+    },
+    {
+      "step": "M2.1",
+      "tests": 77
+    },
+    {
+      "step": "M2.2",
+      "tests": 90
+    },
+    {
+      "step": "M2.3",
+      "tests": 112
+    },
+    {
+      "step": "M2.4",
+      "tests": 122
+    },
+    {
+      "step": "UTC fix",
+      "tests": 126
+    },
+    {
+      "step": "M2.5",
+      "tests": 136
+    },
+    {
+      "step": "M2.6, Milestone 2 complete",
+      "tests": 158
+    },
+    {
+      "step": "M3.1",
+      "tests": 191
+    },
+    {
+      "step": "M3.2",
+      "tests": 201
+    },
+    {
+      "step": "M3.3",
+      "tests": 217
+    },
+    {
+      "step": "M3.4",
+      "tests": 242
+    },
+    {
+      "step": "M3.5, stub-tested",
+      "tests": 258
+    },
+    {
+      "step": "M3.6",
+      "tests": 270
+    },
+    {
+      "step": "M3.7 eval harness, offline",
+      "tests": 320
+    },
+    {
+      "step": "M3.7 rubric fixes",
+      "tests": 325
+    },
+    {
+      "step": "amount rule",
+      "tests": 326
+    },
+    {
+      "step": "D55, no request IDs",
+      "tests": 327
+    },
+    {
+      "step": "M4.1",
+      "tests": 359
+    },
+    {
+      "step": "M4.2",
+      "tests": 374
+    },
+    {
+      "step": "M4.3",
+      "tests": 396
+    },
+    {
+      "step": "M4.4",
+      "tests": 424
+    },
+    {
+      "step": "M4.5",
+      "tests": 454
+    },
+    {
+      "step": "M4.6",
+      "tests": 494
+    },
+    {
+      "step": "M4.7",
+      "tests": 546
+    },
+    {
+      "step": "D68 + recordings-only",
+      "tests": 555
+    },
+    {
+      "step": "amount display",
+      "tests": 560
+    },
+    {
+      "step": "D69",
+      "tests": 562
+    },
+    {
+      "step": "M4.8 back-office key",
+      "tests": 604
+    },
+    {
+      "step": "H1 tidy",
+      "tests": 614
+    },
+    {
+      "step": "H2 limits",
+      "tests": 653
+    },
+    {
+      "step": "H3 payment expiry",
+      "tests": 666
+    },
+    {
+      "step": "H4 fixed-reply notes",
+      "tests": 680
+    },
+    {
+      "step": "H5 readiness",
+      "tests": 683
+    },
+    {
+      "step": "policy fallback tests",
+      "tests": 685
+    },
+    {
+      "step": "M5.1 streaming text",
+      "tests": 717
+    },
+    {
+      "step": "M5.2 live speech adapters",
+      "tests": 747
+    },
+    {
+      "step": "M5.3 call engine",
+      "tests": 771
+    },
+    {
+      "step": "M5.4 live safety",
+      "tests": 797
+    },
+    {
+      "step": "M5.5 live endpoint",
+      "tests": 833
+    },
+    {
+      "step": "M5.6 browser page",
+      "tests": 853
+    },
+    {
+      "step": "M5.7 measurement tools",
+      "tests": 867
+    },
+    {
+      "step": "call clock",
+      "tests": 869
+    },
+    {
+      "step": "evidence report",
+      "tests": 877
+    }
+  ],
+  "mutation_checks": {
+    "_about": "Deliberate bugs put into new code to check the tests catch them. 'first_time' = caught by the tests as first written; 'test_gaps' = survivors that exposed a missing or weak test, which was then added. Earlier milestones (M1-M3) were mutation-checked too.",
+    "steps": [
+      {
+        "step": "M3.7 no request IDs",
+        "bugs": 3,
+        "first_time": 3,
+        "test_gaps": 0
+      },
+      {
+        "step": "M4.1 audio",
+        "bugs": 13,
+        "first_time": 13,
+        "test_gaps": 0,
+        "note": "one exposed a real crash case: a 0 Hz header would divide by zero"
+      },
+      {
+        "step": "M4.2 speech contracts",
+        "bugs": 8,
+        "first_time": 8,
+        "test_gaps": 0
+      },
+      {
+        "step": "M4.3 voice turn",
+        "bugs": 14,
+        "first_time": 14,
+        "test_gaps": 0
+      },
+      {
+        "step": "M4.4 voice endpoint",
+        "bugs": 10,
+        "first_time": 10,
+        "test_gaps": 0
+      },
+      {
+        "step": "M4.5 account labels",
+        "bugs": 12,
+        "first_time": 12,
+        "test_gaps": 0
+      },
+      {
+        "step": "M4.6 Deepgram adapters",
+        "bugs": 15,
+        "first_time": 15,
+        "test_gaps": 0
+      },
+      {
+        "step": "M4.7 voice checks",
+        "bugs": 11,
+        "first_time": 11,
+        "test_gaps": 0
+      },
+      {
+        "step": "M4.8 back-office auth",
+        "bugs": 14,
+        "first_time": 13,
+        "test_gaps": 1
+      },
+      {
+        "step": "H1 tidy",
+        "bugs": 14,
+        "first_time": 12,
+        "test_gaps": 2
+      },
+      {
+        "step": "H2 limits",
+        "bugs": 25,
+        "first_time": 24,
+        "test_gaps": 1
+      },
+      {
+        "step": "H3 payment expiry",
+        "bugs": 12,
+        "first_time": 12,
+        "test_gaps": 0
+      },
+      {
+        "step": "H4 fixed-reply notes",
+        "bugs": 12,
+        "first_time": 11,
+        "test_gaps": 1
+      },
+      {
+        "step": "H5 readiness",
+        "bugs": 6,
+        "first_time": 6,
+        "test_gaps": 0
+      },
+      {
+        "step": "Policy deny-by-default",
+        "bugs": 3,
+        "first_time": 3,
+        "test_gaps": 0
+      },
+      {
+        "step": "M5.1 streaming text",
+        "bugs": 15,
+        "first_time": 14,
+        "test_gaps": 1
+      },
+      {
+        "step": "M5.2 live speech adapters",
+        "bugs": 22,
+        "first_time": 22,
+        "test_gaps": 0
+      },
+      {
+        "step": "M5.3 call engine",
+        "bugs": 22,
+        "first_time": 20,
+        "test_gaps": 2
+      },
+      {
+        "step": "M5.4 interruptions",
+        "bugs": 24,
+        "first_time": 23,
+        "test_gaps": 1
+      },
+      {
+        "step": "M5.5 live endpoint",
+        "bugs": 23,
+        "first_time": 21,
+        "test_gaps": 2
+      },
+      {
+        "step": "M5.6 browser page",
+        "bugs": 21,
+        "first_time": 19,
+        "test_gaps": 1,
+        "note": "one survivor was redundant code, removed"
+      },
+      {
+        "step": "M5.7 measurement tools",
+        "bugs": 14,
+        "first_time": 12,
+        "test_gaps": 2
+      },
+      {
+        "step": "Call clock",
+        "bugs": 12,
+        "first_time": 12,
+        "test_gaps": 0
+      },
+      {
+        "step": "Evidence report",
+        "bugs": 10,
+        "first_time": 9,
+        "test_gaps": 0,
+        "note": "1 had no visible effect: a redundant filter on rows that are never written out"
+      }
+    ]
+  },
+  "prompt_leaks": {
+    "_about": "Counted in the eval's conversation transcripts (not in the repo), outside the grader so versions stay comparable.",
+    "request_ids_read_aloud": {
+      "before": "10 of 50 conversations (baseline)",
+      "after": "0 of 50 (v1)",
+      "fix": "tools stopped returning request IDs, so the model can't read out what it never sees (D55)"
+    },
+    "account_ids_spoken": {
+      "before": "33 of 82 replies (v1)",
+      "after": "0 of 80 (v2)",
+      "fix": "spoken account names, unique per customer, plus a prompt rule (D58, D65)"
+    }
+  },
+  "turn_based_voice_m4": {
+    "_about": "Live smoke test, 4 turns, 2026-10-30 (D66).",
+    "per_turn_s": [
+      5.8,
+      9.5
+    ],
+    "listen_s": [
+      0.7,
+      1.6
+    ],
+    "agent_s": [
+      2.8,
+      4.7
+    ],
+    "speak_s": [
+      1.5,
+      4.3
+    ]
+  },
+  "safety_rules_in_code": [
+    "Caller identity comes only from a signed session token; the model never supplies it (D39).",
+    "A payment is proposed, read back, and confirmed only in a later caller turn; confirm takes no arguments (D23, D24).",
+    "A proposal expires after 2 further caller turns or 5 minutes (D73).",
+    "A payment whose read-back was interrupted can't be confirmed until it is read back again (D82).",
+    "Someone else's account looks exactly like a missing one (D21).",
+    "Misheard or unclear speech never reaches the model; it never counts as a caller turn (D60, D69).",
+    "Every route is either back-office (admin key), caller (session token) or health, enforced by a test that lists them all (D70, D83).",
+    "Per-customer rate limits, conversation caps, a 30-turn handoff and a 15-minute call limit bound cost (D72, D82)."
+  ],
+  "decisions": [
+    {
+      "id": "D24",
+      "decision": "Confirmation only in a later caller turn, counted by code",
+      "why": "The model could call propose and confirm back to back; code counts turns, the model can't."
+    },
+    {
+      "id": "D55",
+      "decision": "Hide internal IDs from the model instead of telling it not to say them",
+      "why": "Prompt rules leak under pressure; data the model never sees can't be read aloud (10/50 to 0/50)."
+    },
+    {
+      "id": "D56",
+      "decision": "Kept a slightly strict judge rather than tuning it to pass",
+      "why": "A grader tuned until the agent passes stops measuring anything."
+    },
+    {
+      "id": "D69",
+      "decision": "Speech confidence threshold 0.6, set from measurements",
+      "why": "No correctly heard clip scored below 0.75; two mishearings scored 0.52 and 0.59."
+    },
+    {
+      "id": "D70",
+      "decision": "Locked the original REST API behind an admin key after a self-review",
+      "why": "An anonymous client could read balances and record payments; demonstrated, then closed."
+    },
+    {
+      "id": "D77",
+      "decision": "Own streaming pipeline (Flux + streaming voice + our agent loop) instead of a managed voice agent",
+      "why": "Keeps the turn-counting safety rules and the eval on the production path; cheaper per minute."
+    },
+    {
+      "id": "D77",
+      "decision": "No early 'probably finished' replies",
+      "why": "A discarded draft could already have run a tool, such as proposing a payment."
+    },
+    {
+      "id": "D82",
+      "decision": "Track what the caller actually heard, sentence by sentence",
+      "why": "After an interruption the model is told what got through, and an unheard read-back blocks confirmation."
+    }
+  ],
+  "limits": [
+    "All data is synthetic; no real customers or money.",
+    "Eval: 25 scripted conversations x 2 runs, also used to tune v1 and v2; fresh held-out cases are needed before more tuning.",
+    "The judge (Claude Haiku) is slightly strict on two phrasings; one remaining failure is that.",
+    "Voice checks: 15 phrases, three synthetic voices and one real voice; real phone audio is still to be measured.",
+    "Live speed: a handful of calls from one laptop; timings start when the speech service detects the end of the caller's turn, so its own 0.5-1.2 s comes on top.",
+    "Mutation testing shows the tests catch the bugs tried, not that no bugs remain."
+  ],
+  "decisions_logged": 88
+}

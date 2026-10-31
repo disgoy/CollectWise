@@ -1,0 +1,134 @@
+[
+ {
+  "kind": "rule",
+  "ref": "",
+  "item": "Caller identity comes only from a signed session token; the model never supplies it (D39).",
+  "why": ""
+ },
+ {
+  "kind": "rule",
+  "ref": "",
+  "item": "A payment is proposed, read back, and confirmed only in a later caller turn; confirm takes no arguments (D23, D24).",
+  "why": ""
+ },
+ {
+  "kind": "rule",
+  "ref": "",
+  "item": "A proposal expires after 2 further caller turns or 5 minutes (D73).",
+  "why": ""
+ },
+ {
+  "kind": "rule",
+  "ref": "",
+  "item": "A payment whose read-back was interrupted can't be confirmed until it is read back again (D82).",
+  "why": ""
+ },
+ {
+  "kind": "rule",
+  "ref": "",
+  "item": "Someone else's account looks exactly like a missing one (D21).",
+  "why": ""
+ },
+ {
+  "kind": "rule",
+  "ref": "",
+  "item": "Misheard or unclear speech never reaches the model; it never counts as a caller turn (D60, D69).",
+  "why": ""
+ },
+ {
+  "kind": "rule",
+  "ref": "",
+  "item": "Every route is either back-office (admin key), caller (session token) or health, enforced by a test that lists them all (D70, D83).",
+  "why": ""
+ },
+ {
+  "kind": "rule",
+  "ref": "",
+  "item": "Per-customer rate limits, conversation caps, a 30-turn handoff and a 15-minute call limit bound cost (D72, D82).",
+  "why": ""
+ },
+ {
+  "kind": "decision",
+  "ref": "D24",
+  "item": "Confirmation only in a later caller turn, counted by code",
+  "why": "The model could call propose and confirm back to back; code counts turns, the model can't."
+ },
+ {
+  "kind": "decision",
+  "ref": "D55",
+  "item": "Hide internal IDs from the model instead of telling it not to say them",
+  "why": "Prompt rules leak under pressure; data the model never sees can't be read aloud (10/50 to 0/50)."
+ },
+ {
+  "kind": "decision",
+  "ref": "D56",
+  "item": "Kept a slightly strict judge rather than tuning it to pass",
+  "why": "A grader tuned until the agent passes stops measuring anything."
+ },
+ {
+  "kind": "decision",
+  "ref": "D69",
+  "item": "Speech confidence threshold 0.6, set from measurements",
+  "why": "No correctly heard clip scored below 0.75; two mishearings scored 0.52 and 0.59."
+ },
+ {
+  "kind": "decision",
+  "ref": "D70",
+  "item": "Locked the original REST API behind an admin key after a self-review",
+  "why": "An anonymous client could read balances and record payments; demonstrated, then closed."
+ },
+ {
+  "kind": "decision",
+  "ref": "D77",
+  "item": "Own streaming pipeline (Flux + streaming voice + our agent loop) instead of a managed voice agent",
+  "why": "Keeps the turn-counting safety rules and the eval on the production path; cheaper per minute."
+ },
+ {
+  "kind": "decision",
+  "ref": "D77",
+  "item": "No early 'probably finished' replies",
+  "why": "A discarded draft could already have run a tool, such as proposing a payment."
+ },
+ {
+  "kind": "decision",
+  "ref": "D82",
+  "item": "Track what the caller actually heard, sentence by sentence",
+  "why": "After an interruption the model is told what got through, and an unheard read-back blocks confirmation."
+ },
+ {
+  "kind": "limit",
+  "ref": "",
+  "item": "All data is synthetic; no real customers or money.",
+  "why": ""
+ },
+ {
+  "kind": "limit",
+  "ref": "",
+  "item": "Eval: 25 scripted conversations x 2 runs, also used to tune v1 and v2; fresh held-out cases are needed before more tuning.",
+  "why": ""
+ },
+ {
+  "kind": "limit",
+  "ref": "",
+  "item": "The judge (Claude Haiku) is slightly strict on two phrasings; one remaining failure is that.",
+  "why": ""
+ },
+ {
+  "kind": "limit",
+  "ref": "",
+  "item": "Voice checks: 15 phrases, three synthetic voices and one real voice; real phone audio is still to be measured.",
+  "why": ""
+ },
+ {
+  "kind": "limit",
+  "ref": "",
+  "item": "Live speed: a handful of calls from one laptop; timings start when the speech service detects the end of the caller's turn, so its own 0.5-1.2 s comes on top.",
+  "why": ""
+ },
+ {
+  "kind": "limit",
+  "ref": "",
+  "item": "Mutation testing shows the tests catch the bugs tried, not that no bugs remain.",
+  "why": ""
+ }
+]

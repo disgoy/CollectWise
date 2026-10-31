@@ -1,0 +1,22 @@
+[
+ {
+  "stage": "per turn",
+  "low_s": 5.8,
+  "high_s": 9.5
+ },
+ {
+  "stage": "listen",
+  "low_s": 0.7,
+  "high_s": 1.6
+ },
+ {
+  "stage": "agent",
+  "low_s": 2.8,
+  "high_s": 4.7
+ },
+ {
+  "stage": "speak",
+  "low_s": 1.5,
+  "high_s": 4.3
+ }
+]

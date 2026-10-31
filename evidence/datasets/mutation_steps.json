@@ -1,0 +1,149 @@
+[
+ {
+  "step": "M3.7 no request IDs",
+  "bugs": 3,
+  "first_time": 3,
+  "test_gaps": 0
+ },
+ {
+  "step": "M4.1 audio",
+  "bugs": 13,
+  "first_time": 13,
+  "test_gaps": 0,
+  "note": "one exposed a real crash case: a 0 Hz header would divide by zero"
+ },
+ {
+  "step": "M4.2 speech contracts",
+  "bugs": 8,
+  "first_time": 8,
+  "test_gaps": 0
+ },
+ {
+  "step": "M4.3 voice turn",
+  "bugs": 14,
+  "first_time": 14,
+  "test_gaps": 0
+ },
+ {
+  "step": "M4.4 voice endpoint",
+  "bugs": 10,
+  "first_time": 10,
+  "test_gaps": 0
+ },
+ {
+  "step": "M4.5 account labels",
+  "bugs": 12,
+  "first_time": 12,
+  "test_gaps": 0
+ },
+ {
+  "step": "M4.6 Deepgram adapters",
+  "bugs": 15,
+  "first_time": 15,
+  "test_gaps": 0
+ },
+ {
+  "step": "M4.7 voice checks",
+  "bugs": 11,
+  "first_time": 11,
+  "test_gaps": 0
+ },
+ {
+  "step": "M4.8 back-office auth",
+  "bugs": 14,
+  "first_time": 13,
+  "test_gaps": 1
+ },
+ {
+  "step": "H1 tidy",
+  "bugs": 14,
+  "first_time": 12,
+  "test_gaps": 2
+ },
+ {
+  "step": "H2 limits",
+  "bugs": 25,
+  "first_time": 24,
+  "test_gaps": 1
+ },
+ {
+  "step": "H3 payment expiry",
+  "bugs": 12,
+  "first_time": 12,
+  "test_gaps": 0
+ },
+ {
+  "step": "H4 fixed-reply notes",
+  "bugs": 12,
+  "first_time": 11,
+  "test_gaps": 1
+ },
+ {
+  "step": "H5 readiness",
+  "bugs": 6,
+  "first_time": 6,
+  "test_gaps": 0
+ },
+ {
+  "step": "Policy deny-by-default",
+  "bugs": 3,
+  "first_time": 3,
+  "test_gaps": 0
+ },
+ {
+  "step": "M5.1 streaming text",
+  "bugs": 15,
+  "first_time": 14,
+  "test_gaps": 1
+ },
+ {
+  "step": "M5.2 live speech adapters",
+  "bugs": 22,
+  "first_time": 22,
+  "test_gaps": 0
+ },
+ {
+  "step": "M5.3 call engine",
+  "bugs": 22,
+  "first_time": 20,
+  "test_gaps": 2
+ },
+ {
+  "step": "M5.4 interruptions",
+  "bugs": 24,
+  "first_time": 23,
+  "test_gaps": 1
+ },
+ {
+  "step": "M5.5 live endpoint",
+  "bugs": 23,
+  "first_time": 21,
+  "test_gaps": 2
+ },
+ {
+  "step": "M5.6 browser page",
+  "bugs": 21,
+  "first_time": 19,
+  "test_gaps": 1,
+  "note": "one survivor was redundant code, removed"
+ },
+ {
+  "step": "M5.7 measurement tools",
+  "bugs": 14,
+  "first_time": 12,
+  "test_gaps": 2
+ },
+ {
+  "step": "Call clock",
+  "bugs": 12,
+  "first_time": 12,
+  "test_gaps": 0
+ },
+ {
+  "step": "Evidence report",
+  "bugs": 10,
+  "first_time": 9,
+  "test_gaps": 0,
+  "note": "1 had no visible effect: a redundant filter on rows that are never written out"
+ }
+]

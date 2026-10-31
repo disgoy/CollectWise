@@ -1,0 +1,14 @@
+[
+ {
+  "leak": "request ids read aloud",
+  "before": "10 of 50 conversations (baseline)",
+  "after": "0 of 50 (v1)",
+  "fix": "tools stopped returning request IDs, so the model can't read out what it never sees (D55)"
+ },
+ {
+  "leak": "account ids spoken",
+  "before": "33 of 82 replies (v1)",
+  "after": "0 of 80 (v2)",
+  "fix": "spoken account names, unique per customer, plus a prompt rule (D58, D65)"
+ }
+]

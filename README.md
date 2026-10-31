@@ -6,6 +6,8 @@ a servicing request is evaluated and recorded, never executed.
 
 **Design write-up:** [docs/DESIGN.md](docs/DESIGN.md): architecture, key decisions, engineering challenges and measured results.
 
+**Evidence dashboard:** [CollectWise Evidence](https://claude.ai/artifact/MKYnNm7ioC612k77Uy7KYW): agent eval by version, error analysis, hearing accuracy, live-call speed and test growth, in charts. Its data is rebuilt from the real result files by `python -m scripts.build_evidence` (aggregates only, never transcripts) into [`evidence/`](evidence/).
+
 ## What exists today
 
 - FastAPI API for customers, accounts and servicing requests

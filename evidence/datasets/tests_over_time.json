@@ -1,0 +1,186 @@
+[
+ {
+  "step": "foundation",
+  "tests": 51
+ },
+ {
+  "step": "M1",
+  "tests": 60
+ },
+ {
+  "step": "M1.5",
+  "tests": 71
+ },
+ {
+  "step": "M2.1",
+  "tests": 77
+ },
+ {
+  "step": "M2.2",
+  "tests": 90
+ },
+ {
+  "step": "M2.3",
+  "tests": 112
+ },
+ {
+  "step": "M2.4",
+  "tests": 122
+ },
+ {
+  "step": "UTC fix",
+  "tests": 126
+ },
+ {
+  "step": "M2.5",
+  "tests": 136
+ },
+ {
+  "step": "M2.6, Milestone 2 complete",
+  "tests": 158
+ },
+ {
+  "step": "M3.1",
+  "tests": 191
+ },
+ {
+  "step": "M3.2",
+  "tests": 201
+ },
+ {
+  "step": "M3.3",
+  "tests": 217
+ },
+ {
+  "step": "M3.4",
+  "tests": 242
+ },
+ {
+  "step": "M3.5, stub-tested",
+  "tests": 258
+ },
+ {
+  "step": "M3.6",
+  "tests": 270
+ },
+ {
+  "step": "M3.7 eval harness, offline",
+  "tests": 320
+ },
+ {
+  "step": "M3.7 rubric fixes",
+  "tests": 325
+ },
+ {
+  "step": "amount rule",
+  "tests": 326
+ },
+ {
+  "step": "D55, no request IDs",
+  "tests": 327
+ },
+ {
+  "step": "M4.1",
+  "tests": 359
+ },
+ {
+  "step": "M4.2",
+  "tests": 374
+ },
+ {
+  "step": "M4.3",
+  "tests": 396
+ },
+ {
+  "step": "M4.4",
+  "tests": 424
+ },
+ {
+  "step": "M4.5",
+  "tests": 454
+ },
+ {
+  "step": "M4.6",
+  "tests": 494
+ },
+ {
+  "step": "M4.7",
+  "tests": 546
+ },
+ {
+  "step": "D68 + recordings-only",
+  "tests": 555
+ },
+ {
+  "step": "amount display",
+  "tests": 560
+ },
+ {
+  "step": "D69",
+  "tests": 562
+ },
+ {
+  "step": "M4.8 back-office key",
+  "tests": 604
+ },
+ {
+  "step": "H1 tidy",
+  "tests": 614
+ },
+ {
+  "step": "H2 limits",
+  "tests": 653
+ },
+ {
+  "step": "H3 payment expiry",
+  "tests": 666
+ },
+ {
+  "step": "H4 fixed-reply notes",
+  "tests": 680
+ },
+ {
+  "step": "H5 readiness",
+  "tests": 683
+ },
+ {
+  "step": "policy fallback tests",
+  "tests": 685
+ },
+ {
+  "step": "M5.1 streaming text",
+  "tests": 717
+ },
+ {
+  "step": "M5.2 live speech adapters",
+  "tests": 747
+ },
+ {
+  "step": "M5.3 call engine",
+  "tests": 771
+ },
+ {
+  "step": "M5.4 live safety",
+  "tests": 797
+ },
+ {
+  "step": "M5.5 live endpoint",
+  "tests": 833
+ },
+ {
+  "step": "M5.6 browser page",
+  "tests": 853
+ },
+ {
+  "step": "M5.7 measurement tools",
+  "tests": 867
+ },
+ {
+  "step": "call clock",
+  "tests": 869
+ },
+ {
+  "step": "evidence report",
+  "tests": 877
+ }
+]

@@ -1,0 +1,128 @@
+[
+ {
+  "version": "baseline",
+  "criterion": "grounded",
+  "fails": 0,
+  "applicable": 50
+ },
+ {
+  "version": "baseline",
+  "criterion": "no_paid_claim",
+  "fails": 0,
+  "applicable": 30
+ },
+ {
+  "version": "baseline",
+  "criterion": "no_internal_ids",
+  "fails": 10,
+  "applicable": 50
+ },
+ {
+  "version": "baseline",
+  "criterion": "plain_language",
+  "fails": 0,
+  "applicable": 50
+ },
+ {
+  "version": "baseline",
+  "criterion": "no_overpromise",
+  "fails": 1,
+  "applicable": 50
+ },
+ {
+  "version": "baseline",
+  "criterion": "responsive",
+  "fails": 0,
+  "applicable": 50
+ },
+ {
+  "version": "baseline",
+  "criterion": "case_expectations",
+  "fails": 4,
+  "applicable": 50
+ },
+ {
+  "version": "v1",
+  "criterion": "grounded",
+  "fails": 0,
+  "applicable": 50
+ },
+ {
+  "version": "v1",
+  "criterion": "no_paid_claim",
+  "fails": 0,
+  "applicable": 32
+ },
+ {
+  "version": "v1",
+  "criterion": "no_internal_ids",
+  "fails": 0,
+  "applicable": 50
+ },
+ {
+  "version": "v1",
+  "criterion": "plain_language",
+  "fails": 0,
+  "applicable": 50
+ },
+ {
+  "version": "v1",
+  "criterion": "no_overpromise",
+  "fails": 1,
+  "applicable": 50
+ },
+ {
+  "version": "v1",
+  "criterion": "responsive",
+  "fails": 0,
+  "applicable": 50
+ },
+ {
+  "version": "v1",
+  "criterion": "case_expectations",
+  "fails": 2,
+  "applicable": 50
+ },
+ {
+  "version": "v2",
+  "criterion": "grounded",
+  "fails": 0,
+  "applicable": 50
+ },
+ {
+  "version": "v2",
+  "criterion": "no_paid_claim",
+  "fails": 0,
+  "applicable": 30
+ },
+ {
+  "version": "v2",
+  "criterion": "no_internal_ids",
+  "fails": 0,
+  "applicable": 50
+ },
+ {
+  "version": "v2",
+  "criterion": "plain_language",
+  "fails": 0,
+  "applicable": 50
+ },
+ {
+  "version": "v2",
+  "criterion": "no_overpromise",
+  "fails": 1,
+  "applicable": 50
+ },
+ {
+  "version": "v2",
+  "criterion": "responsive",
+  "fails": 0,
+  "applicable": 50
+ },
+ {
+  "version": "v2",
+  "criterion": "case_expectations",
+  "fails": 1,
+  "applicable": 50
+ }
+]

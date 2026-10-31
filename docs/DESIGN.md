@@ -66,7 +66,7 @@ Key places in the code: the policy is [`backend/app/policies/servicing.py`](../b
 
 ## Measured results
 
-All model and speech numbers come from paid runs the author started deliberately; nothing paid runs in the test suite.
+All model and speech numbers come from paid runs the author started deliberately; nothing paid runs in the test suite. The same numbers, in charts: the [evidence dashboard](https://claude.ai/artifact/MKYnNm7ioC612k77Uy7KYW), built by [`scripts/build_evidence.py`](../scripts/build_evidence.py) from the result files (counts, rates and timings only).
 
 **Agent eval** (25 synthetic conversations × 2 repetitions, Claude Sonnet 5.5, graded by checks plus a Claude Haiku 5.5 judge; about $0.25 per run):
 
@@ -89,7 +89,9 @@ All model and speech numbers come from paid runs the author started deliberately
 
 **Latency** (Milestone 4, turn-based voice, live smoke run): **5.8–9.5 s per voice turn**: speech-to-text 0.7–1.6 s, agent 2.8–4.7 s (2–3 sequential model calls), text-to-speech 1.5–4.3 s. Text-to-speech produces its first audio in 0.32–0.36 s whatever the reply length but the whole reply takes 2.7–6.6 s, so streaming could save roughly 2–6 s per turn. That is Milestone 5's main target.
 
-**Code quality:** 717 tests, all passing in about 7 seconds; more than 200 hand-written mutants across the milestones, every one caught (a few only after a test was strengthened); 95% line and branch coverage, with no enforced threshold (D75).
+**Latency** (Milestone 5, live streaming call, 2 calls, 14 turns): the agent's voice starts a median **2.9 s** after the speech service decides the caller has finished (1.6–4.3 s); its own end-of-turn detection, 0.5–1.2 s, comes on top. Turns with no lookup took about 2.0 s, turns with lookups about 3.1 s; speech adds only about 0.34 s after the first words are written, so lookups, not speech, are now the main cost. A small sample: more calls are needed before tuning.
+
+**Code quality:** 877 tests, all passing in about 10 seconds; 335 deliberate bugs planted across 24 steps, 95% caught by the tests as first written, 14 exposing a missing test that was then added, and 2 with no visible effect; 95% line and branch coverage, with no enforced threshold (D75).
 
 ## Testing approach
 
