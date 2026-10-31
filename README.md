@@ -91,6 +91,7 @@ refuses paid runs until a person approves the harness with `--approve-harness`.
 | `COLLECTWISE_AGENT_EFFORT` | `medium` | Model effort level |
 | `COLLECTWISE_AGENT_TIMEOUT_S` | `15` | Longest wait for the next piece of a model reply before the caller hears "having trouble" |
 | `COLLECTWISE_AGENT_MAX_RETRIES` | `1` | Retries of a failed model call |
+| `COLLECTWISE_TRACING` | unset (off) | `console` prints trace spans; `otlp` sends them to `OTEL_EXPORTER_OTLP_ENDPOINT` (e.g. a local Jaeger). Spans hold codes and timings, never words |
 | `COLLECTWISE_TURN_LOCK_WAIT_S` | `5` | A typed message waits this long for the previous turn, then gets 409 |
 | `ANTHROPIC_API_KEY` | none | Anthropic credentials |
 | `COLLECTWISE_SPEECH` | unset (voice off) | Set to `deepgram` to enable real, paid speech-to-text and text-to-speech |

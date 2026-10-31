@@ -54,6 +54,9 @@ AGENT_EFFORT = os.environ.get("COLLECTWISE_AGENT_EFFORT", "medium")
 # hears "having trouble" after about 30 seconds at most.
 AGENT_TIMEOUT_S = float(os.environ.get("COLLECTWISE_AGENT_TIMEOUT_S", "15"))
 AGENT_MAX_RETRIES = int(os.environ.get("COLLECTWISE_AGENT_MAX_RETRIES", "1"))
+# Tracing (M6.2): unset = off, "console" = spans printed, "otlp" = sent to
+# OTEL_EXPORTER_OTLP_ENDPOINT (default http://localhost:4318).
+TRACING = os.environ.get("COLLECTWISE_TRACING")
 # How long a typed message waits for the conversation's previous turn to
 # finish before it is refused with 409 (M6.1).
 TURN_LOCK_WAIT_S = float(os.environ.get("COLLECTWISE_TURN_LOCK_WAIT_S", "5"))

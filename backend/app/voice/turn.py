@@ -10,9 +10,10 @@ import logging
 import time
 from dataclasses import dataclass
 
+from opentelemetry.trace import Status, StatusCode
 from sqlalchemy.orm import Session
 
-from backend.app import config
+from backend.app import config, telemetry
 from backend.app.agent.llm import LLMClient
 from backend.app.agent.loop import REPLY_HANDED_OFF, run_turn
 from backend.app.agent.sessions import ConversationSession
@@ -67,11 +68,15 @@ def run_voice_turn(
         reply, outcome = REPLY_HANDED_OFF, "already_handed_off"
     else:
         started = time.perf_counter()
-        try:
-            heard = stt.transcribe(audio)
-        except SpeechUnavailableError:
-            logger.warning("Speech-to-text unavailable in session %s", session.session_id)
-            heard = None
+        with telemetry.span("voice.listen", session_id=session.session_id) as listen_span:
+            try:
+                heard = stt.transcribe(audio)
+            except SpeechUnavailableError:
+                logger.warning("Speech-to-text unavailable in session %s", session.session_id)
+                heard = None
+                listen_span.set_status(Status(StatusCode.ERROR))
+            telemetry.annotate(listen_span, ok=heard is not None,
+                               confidence=heard.confidence if heard is not None else None)
         stt_ms = _elapsed_ms(started)
 
         if heard is None:
@@ -95,12 +100,15 @@ def run_voice_turn(
                 session.note_unheard(reply)
 
     started = time.perf_counter()
-    try:
-        reply_audio = tts.synthesize(reply)
-    except SpeechUnavailableError:
-        # The caller's app can still show the reply as text.
-        logger.warning("Text-to-speech unavailable in session %s", session.session_id)
-        reply_audio = None
+    with telemetry.span("voice.speak", session_id=session.session_id) as speak_span:
+        try:
+            reply_audio = tts.synthesize(reply)
+        except SpeechUnavailableError:
+            # The caller's app can still show the reply as text.
+            logger.warning("Text-to-speech unavailable in session %s", session.session_id)
+            reply_audio = None
+            speak_span.set_status(Status(StatusCode.ERROR))
+        telemetry.annotate(speak_span, ok=reply_audio is not None, outcome=outcome)
     tts_ms = _elapsed_ms(started)
 
     record_voice_turn_metric(

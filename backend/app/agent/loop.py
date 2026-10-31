@@ -7,7 +7,9 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from backend.app import config
+from opentelemetry.trace import Span, Status, StatusCode
+
+from backend.app import config, telemetry
 from backend.app.agent.llm import LLMClient, LLMUnavailableError
 from backend.app.agent.sessions import ConversationSession
 from backend.app.services.conversation_events import (
@@ -114,6 +116,20 @@ def _reply_text(content: list[Any]) -> str:
     ).strip()
 
 
+def _marking_first_text(on_text: Callable[[str], None], span: Span) -> Callable[[str], None]:
+    """Pass streamed text on, marking on the span when the first piece came."""
+    seen = False
+
+    def passing(piece: str) -> None:
+        nonlocal seen
+        if not seen:
+            seen = True
+            span.add_event("first_text")
+        on_text(piece)
+
+    return passing
+
+
 def run_turn(
     session: ConversationSession,
     text: str,
@@ -154,8 +170,9 @@ def run_turn(
             )
 
         try:
-            return _run_turn(session, text, llm=llm, db=db, system=system, record=record,
-                             turn_started=turn_started, on_text=on_text)
+            with telemetry.span("agent.turn", session_id=session.session_id) as turn_span:
+                return _run_turn(session, text, llm=llm, db=db, system=system, record=record,
+                                 turn_started=turn_started, on_text=on_text, span=turn_span)
         finally:
             # Written after the turn in a separate commit, so servicing
             # transactions and tool rollbacks never touch them (D48).
@@ -174,12 +191,16 @@ def _run_turn(
     record: Callable[..., None],
     turn_started: float,
     on_text: Callable[[str], None] | None,
+    span: Span,
 ) -> TurnResult:
     state = session.state
     tool_calls: list[ToolCallRecord] = []
+    model_calls = 0
 
     def finish(reply: str, outcome: str) -> TurnResult:
         record("turn_completed", outcome=outcome, latency_ms=_elapsed_ms(turn_started))
+        telemetry.annotate(span, turn=state.turn, outcome=outcome, model_calls=model_calls,
+                           tool_calls=len(tool_calls))
         if outcome in UNHEARD_OUTCOMES:
             session.note_unheard(reply)
             # A payment proposed in this turn was never read back: the caller
@@ -189,6 +210,7 @@ def _run_turn(
             if pending is not None and pending.proposed_turn == state.turn:
                 state.pending_payment = None
                 record("payment_cancelled", outcome="not_read_back")
+                span.add_event("payment_cancelled", telemetry.attributes(reason="not_read_back"))
         return TurnResult(
             reply=reply,
             handed_off=state.handoff is not None,
@@ -217,7 +239,11 @@ def _run_turn(
 
     def run_tool(name: str, raw_args: Any) -> ToolResult:
         started = time.perf_counter()
-        outcome = execute_tool(ctx, name, raw_args)
+        with telemetry.span("agent.tool", tool=name) as tool_span:
+            outcome = execute_tool(ctx, name, raw_args)
+            telemetry.annotate(tool_span, ok=outcome.ok, error=outcome.error)
+            if outcome.error == "internal_error":
+                tool_span.set_status(Status(StatusCode.ERROR))
         record(
             "tool_call",
             name=name,
@@ -229,14 +255,20 @@ def _run_turn(
 
     for _ in range(MAX_MODEL_CALLS):
         started = time.perf_counter()
-        try:
-            # on_text only when streaming, so non-streaming clients needn't take it.
-            stream = {} if on_text is None else {"on_text": on_text}
-            response = llm.create(system=system, tools=tools, messages=session.messages, **stream)
-        except LLMUnavailableError:
-            record("model_call", outcome="unavailable", latency_ms=_elapsed_ms(started))
-            logger.warning("LLM unavailable in session %s", session.session_id)
-            return finish(REPLY_UNAVAILABLE, "unavailable")
+        model_calls += 1
+        with telemetry.span("agent.model_call", streamed=on_text is not None) as call_span:
+            try:
+                # on_text only when streaming, so non-streaming clients needn't take it.
+                stream = {} if on_text is None else {"on_text": _marking_first_text(on_text, call_span)}
+                response = llm.create(system=system, tools=tools, messages=session.messages, **stream)
+            except LLMUnavailableError:
+                call_span.set_status(Status(StatusCode.ERROR))
+                telemetry.annotate(call_span, error="unavailable")
+                span.set_status(Status(StatusCode.ERROR))
+                record("model_call", outcome="unavailable", latency_ms=_elapsed_ms(started))
+                logger.warning("LLM unavailable in session %s", session.session_id)
+                return finish(REPLY_UNAVAILABLE, "unavailable")
+            telemetry.annotate(call_span, stop_reason=response.stop_reason, **_token_counts(response))
         record(
             "model_call",
             outcome=response.stop_reason,

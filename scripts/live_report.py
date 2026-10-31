@@ -6,6 +6,10 @@ Timings start when Flux says the caller has finished, not when they actually
 stopped talking: add Flux's own end-of-turn lag (0.5-1.2 s measured, D80) for
 what the caller experiences.
 
+Per stage (M6.2), from the conversation events of the same turns: model calls
+that decide to use a tool and those that answer, tools, and model calls per
+turn. Samples are small, so the p95 is close to the max: both are shown.
+
 Usage, from the repo root:
     python -m scripts.live_report [--minutes 60] [--session sess_...]
 """
@@ -14,12 +18,13 @@ import argparse
 import statistics
 import sys
 from collections import Counter
+from collections.abc import Sequence
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from backend.app.db.models import LiveTurnMetricRecord
+from backend.app.db.models import ConversationEventRecord, LiveTurnMetricRecord
 from backend.app.db.session import SessionLocal, create_tables
 
 
@@ -34,12 +39,12 @@ def _spread(name: str, values: list[float]) -> str:
     if not values:
         return f"  {name:38} -"
     return (
-        f"  {name:38} median {statistics.median(values):6.0f} ms, p90 {percentile(values, 0.9):6.0f} ms, "
+        f"  {name:38} median {statistics.median(values):6.0f} ms, p95 {percentile(values, 0.95):6.0f} ms, "
         f"min {min(values):6.0f} ms, max {max(values):6.0f} ms  (n={len(values)})"
     )
 
 
-def summarize(rows: list[LiveTurnMetricRecord]) -> str:
+def summarize(rows: list[LiveTurnMetricRecord], events: Sequence[ConversationEventRecord] = ()) -> str:
     if not rows:
         return "No live turns recorded in this window."
     lines = []
@@ -63,6 +68,10 @@ def summarize(rows: list[LiveTurnMetricRecord]) -> str:
     if no_audio:
         lines.append(f"  {no_audio} repl{'y' if no_audio == 1 else 'ies'} had no audio (the voice failed: text only)")
 
+    if events:
+        lines.append("\nPer stage (from the conversation events of these turns):")
+        lines.extend(_stages(events))
+
     lines.append("\nHearing (word confidence of the final transcript):")
     lines.append(_confidence_line("average word", [r.confidence_mean for r in rows if r.confidence_mean is not None]))
     lines.append(_confidence_line("lowest word", [r.confidence_min for r in rows if r.confidence_min is not None]))
@@ -77,6 +86,24 @@ def summarize(rows: list[LiveTurnMetricRecord]) -> str:
             f"{_ms(row.first_audio_ms):>11}  {_ms(row.agent_ms):>5}  {row.sentences:>9}"
         )
     return "\n".join(lines)
+
+
+def _stages(events: Sequence[ConversationEventRecord]) -> list[str]:
+    calls = [e for e in events if e.event_type == "model_call"]
+    tools = [e for e in events if e.event_type == "tool_call"]
+    per_turn = Counter((e.session_id, e.turn) for e in calls)
+    lines = [
+        _spread("model call that chose a tool", [e.latency_ms for e in calls if e.outcome == "tool_use"]),
+        _spread("model call that answered", [e.latency_ms for e in calls if e.outcome == "end_turn"]),
+        _spread("tool", [e.latency_ms for e in tools if e.latency_ms is not None]),
+    ]
+    counts = sorted(per_turn.values())
+    if counts:
+        lines.append(f"  {'model calls per turn':38} median {statistics.median(counts):g}, max {counts[-1]}  (n={len(counts)})")
+    failed = sum(e.outcome == "unavailable" for e in calls)
+    if failed:
+        lines.append(f"  {failed} model call(s) failed (unavailable)")
+    return lines
 
 
 def _confidence_line(name: str, values: list[float]) -> str:
@@ -101,6 +128,20 @@ def load(db: Session, *, minutes: float | None, session_id: str | None) -> list[
     return list(db.scalars(query))
 
 
+def load_events(db: Session, rows: list[LiveTurnMetricRecord]) -> list[ConversationEventRecord]:
+    """The model and tool calls of exactly these turns."""
+    turns = {(row.session_id, row.turn) for row in rows}
+    if not turns:
+        return []
+    query = (
+        select(ConversationEventRecord)
+        .where(ConversationEventRecord.session_id.in_({session for session, _ in turns}))
+        .where(ConversationEventRecord.event_type.in_(("model_call", "tool_call")))
+        .order_by(ConversationEventRecord.event_id)
+    )
+    return [event for event in db.scalars(query) if (event.session_id, event.turn) in turns]
+
+
 def main(argv: list[str] | None = None, session_factory=SessionLocal) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--minutes", type=float, help="only turns from the last N minutes")
@@ -109,7 +150,8 @@ def main(argv: list[str] | None = None, session_factory=SessionLocal) -> int:
     if session_factory is SessionLocal:
         create_tables()  # an empty report rather than an error on a fresh database
     with session_factory() as db:
-        print(summarize(load(db, minutes=args.minutes, session_id=args.session)))
+        rows = load(db, minutes=args.minutes, session_id=args.session)
+        print(summarize(rows, load_events(db, rows)))
     return 0
 
 

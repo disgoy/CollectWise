@@ -6,7 +6,7 @@ from typing import Any
 
 import anthropic
 
-from backend.app import config
+from backend.app import config, telemetry
 from backend.app.agent.llm import LLMResponse, LLMUnavailableError
 
 logger = logging.getLogger(__name__)
@@ -143,5 +143,14 @@ def build_claude_client(*, model: str, effort: str) -> ClaudeClient:
     client = anthropic.Anthropic(
         timeout=anthropic.Timeout(config.AGENT_TIMEOUT_S, connect=CONNECT_TIMEOUT_S),
         max_retries=config.AGENT_MAX_RETRIES,
+        # Its spans (M6.2) follow our tracing switch and stay metadata-only:
+        # an explicit option ignores ANTHROPIC_OPEN_TELEMETRY_* variables, one
+        # of which would record whole requests and replies. No trace context
+        # is sent to the API.
+        open_telemetry={
+            "tracer_provider": telemetry.PROVIDER,
+            "traces": {"enabled": True, "content_mode": "metadata_only"},
+            "propagation": False,
+        },
     )
     return ClaudeClient(client, model=model, effort=effort)

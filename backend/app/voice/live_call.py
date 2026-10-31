@@ -23,7 +23,7 @@ from typing import Protocol
 
 from sqlalchemy.orm import Session
 
-from backend.app import config
+from backend.app import config, telemetry
 from backend.app.agent.llm import LLMClient
 from backend.app.agent.loop import REPLY_HANDED_OFF, TurnResult, run_turn
 from backend.app.agent.sessions import ConversationSession
@@ -241,6 +241,7 @@ class _LiveCall:
         self._sentence_count = 0
         self._started = clock()
         self._last_activity = self._started
+        self._turn_span = None  # the caller turn being answered, for tracing (M6.2)
 
     # --- listening ---
 
@@ -305,6 +306,8 @@ class _LiveCall:
 
     async def _interrupt(self, reply: _Reply) -> None:
         reply.interrupted = True
+        if self._turn_span is not None:
+            self._turn_span.add_event("interrupted")
         self._audible = None
         self._finish_reply(reply)  # the turn stops waiting for its audio
         if self._speaker is not None:
@@ -392,6 +395,8 @@ class _LiveCall:
                 if isinstance(item, SpokenAudio):
                     if reply.first_audio_at is None:
                         reply.first_audio_at = self._clock()
+                        if self._turn_span is not None:
+                            self._turn_span.add_event("first_audio")
                     if item.segment not in reply.segments:
                         reply.segments.append(item.segment)
                     await self._link.send(AgentAudio(reply.number, item.segment, item.data))
@@ -492,6 +497,16 @@ class _LiveCall:
         if not text:
             # Flux's silence timeout: nothing was said, so nothing is replied.
             return
+        # One span per caller turn, from Flux's end of turn until the reply
+        # has been sent; the agent's spans nest inside it.
+        with telemetry.span("live.turn", session_id=self._session.session_id) as span:
+            self._turn_span = span
+            try:
+                await self._answer(heard, text)
+            finally:
+                self._turn_span = None
+
+    async def _answer(self, heard: HeardEvent, text: str) -> None:
         ended_at = self._clock()
         confidences = heard.word_confidences
         mean = statistics.fmean(confidences) if confidences else None
@@ -533,6 +548,7 @@ class _LiveCall:
         if self._turn_limiter is not None and self._turn_limiter.hit(self._session.caller.customer_id) is not None:
             # Shared with typed and M4 voice turns (D72); no model call.
             logger.info("Live turn rate-limited in session %s", self._session.session_id)
+            telemetry.annotate(self._turn_span, outcome="rate_limited")
             await asyncio.to_thread(self._with_lock, self._session.note_unheard, REPLY_SLOW_DOWN)
             await self._speak_fixed(REPLY_SLOW_DOWN)
             return
@@ -611,6 +627,12 @@ class _LiveCall:
         await asyncio.to_thread(cancel)
 
     async def _record(self, metric: LiveTurnMetric) -> None:
+        if self._turn_span is not None:
+            telemetry.annotate(
+                self._turn_span, turn=metric.turn, outcome=metric.outcome, confidence_mean=metric.confidence_mean,
+                confidence_min=metric.confidence_min, first_text_ms=metric.first_text_ms,
+                first_audio_ms=metric.first_audio_ms, agent_ms=metric.agent_ms, audio_ok=metric.audio_ok,
+            )
         def save() -> None:
             db = self._db_factory()
             try:

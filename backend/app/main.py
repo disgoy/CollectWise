@@ -17,7 +17,7 @@ from backend.app.api.live import router as live_router
 from backend.app.api.demo import router as demo_router
 from backend.app.api.live_page import router as live_page_router
 from backend.app.api.live_page import static_files as live_static_files
-from backend.app import config
+from backend.app import config, telemetry
 
 logger = logging.getLogger(__name__)
 
@@ -25,12 +25,20 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     create_tables()
+    telemetry.configure(config.TRACING)
     if config.DEMO_LOGIN:
         logger.warning(
             "Demo sign-in is ON (COLLECTWISE_DEMO_LOGIN=1): anyone who can reach this server can act as "
             "the demo customers %s. Never use it on a public server.", ", ".join(config.DEMO_CUSTOMERS),
         )
     yield
+    telemetry.shutdown()
+
+
+def _untraced(scope) -> bool:
+    # Health probes and the page's files would only bury the calls.
+    path = scope.get("path", "")
+    return path.startswith("/health") or path.startswith("/live/static")
 
 
 app = FastAPI(
@@ -38,6 +46,18 @@ app = FastAPI(
     description="A reliability-focused AI servicing system using synthetic data.",
     version="0.1.0",
     lifespan=lifespan,
+    # FastAPI's own spans (M6.2) go through our provider, so they follow the
+    # COLLECTWISE_TRACING switch. Its exception logs would include messages
+    # that may quote a caller; its metrics have no exporter here.
+    telemetry={
+        "tracer_provider": telemetry.PROVIDER,
+        "tracing": True,
+        "metrics": False,
+        "logs": False,
+        "operation_spans": False,
+        "auto_configure": False,
+        "exclude": _untraced,
+    },
 )
 
 app.include_router(customers_router)
