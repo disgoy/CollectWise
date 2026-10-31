@@ -233,6 +233,11 @@ def _run_turn(
         ]
 
         if response.stop_reason == "tool_use" and tool_uses:
+            # Words before a tool call ("One moment, let me check.") end a
+            # sentence: without this, a listener holds the final "." for the
+            # next piece and glues it to the answer that follows the tools.
+            if on_text is not None and _reply_text(response.content):
+                on_text("\n")
             tool_results = []
             for block in tool_uses:
                 outcome = run_tool(block.name, block.input)

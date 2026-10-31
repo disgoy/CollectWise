@@ -215,6 +215,29 @@ def test_a_reply_with_a_tool_call_in_the_middle_is_spoken_in_order(db_factory) -
     assert call.speaker.said == ["One moment.", "You have one account."]
 
 
+def test_words_before_a_lookup_are_spoken_while_the_agent_is_still_working(db_factory) -> None:
+    # As the model writes them: no trailing space before the tool call.
+    answer = GatedLLM("You have one account.", "")
+    llm = FakeLLM([use(("t1", "list_accounts", {}), text="One moment, let me check."), answer])
+    call = Call(db_factory, llm)
+
+    async def go():
+        call.start()
+        call.listener.say_turn("Which accounts do I have?")
+        first = await call.link.wait_for(AgentSentence)
+        still_working = not answer.finished
+        answer.release.set()
+        await call.link.wait_for(ReplyDone)
+        await call.end()
+        return first, still_working
+
+    first, still_working = run(go())
+
+    assert still_working
+    assert first == AgentSentence(0, 0, "One moment, let me check.")
+    assert call.speaker.said == ["One moment, let me check.", "You have one account."]
+
+
 def test_a_reply_whose_audio_comes_at_the_end_completes(db_factory) -> None:
     call = Call(db_factory, FakeLLM([say("One. Two. Three.")]),
                 tts=FakeLiveTTS(FakeSpeaker(hold_until_end_reply=True)))
