@@ -4,6 +4,8 @@ A reliability-focused customer-servicing backend, being extended step by step
 into a voice AI servicing agent. All data is synthetic, and no real money moves:
 a servicing request is evaluated and recorded, never executed.
 
+**Design write-up:** [docs/DESIGN.md](docs/DESIGN.md): architecture, key decisions, engineering challenges and measured results.
+
 ## What exists today
 
 - FastAPI API for customers, accounts and servicing requests
