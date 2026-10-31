@@ -105,8 +105,15 @@ def run_turn(
     llm: LLMClient,
     db: Session,
     system: str,
+    on_text: Callable[[str], None] | None = None,
 ) -> TurnResult:
-    """Run one caller turn: model calls and tool calls until a reply."""
+    """Run one caller turn: model calls and tool calls until a reply.
+
+    With `on_text`, the model's text from every call in the turn (including a
+    "let me check" before a tool call) is passed on as it is generated (M5).
+    Fixed replies are never streamed: the caller speaks `TurnResult.reply`
+    when nothing was. The result is the same either way.
+    """
     with session.lock:
         state = session.state
         turn_started = time.perf_counter()
@@ -125,7 +132,7 @@ def run_turn(
 
         try:
             return _run_turn(session, text, llm=llm, db=db, system=system, record=record,
-                             turn_started=turn_started)
+                             turn_started=turn_started, on_text=on_text)
         finally:
             # Written after the turn in a separate commit, so servicing
             # transactions and tool rollbacks never touch them (D48).
@@ -141,6 +148,7 @@ def _run_turn(
     system: str,
     record: Callable[..., None],
     turn_started: float,
+    on_text: Callable[[str], None] | None,
 ) -> TurnResult:
     state = session.state
     tool_calls: list[ToolCallRecord] = []
@@ -189,7 +197,9 @@ def _run_turn(
     for _ in range(MAX_MODEL_CALLS):
         started = time.perf_counter()
         try:
-            response = llm.create(system=system, tools=tools, messages=session.messages)
+            # on_text only when streaming, so non-streaming clients needn't take it.
+            stream = {} if on_text is None else {"on_text": on_text}
+            response = llm.create(system=system, tools=tools, messages=session.messages, **stream)
         except LLMUnavailableError:
             record("model_call", outcome="unavailable", latency_ms=_elapsed_ms(started))
             logger.warning("LLM unavailable in session %s", session.session_id)

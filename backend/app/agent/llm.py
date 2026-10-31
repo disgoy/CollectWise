@@ -1,3 +1,4 @@
+from collections.abc import Callable
 from typing import Any, Protocol
 
 
@@ -24,10 +25,15 @@ class LLMClient(Protocol):
         system: str,
         tools: list[dict[str, Any]],
         messages: list[dict[str, Any]],
+        on_text: Callable[[str], None] | None = None,
     ) -> LLMResponse:
         """Send the conversation and return the model's next response.
 
         `tools` are the provider-neutral schemas from tool_schemas(); the
-        client converts them to its provider's format.
+        client converts them to its provider's format. With `on_text`, the
+        reply's text is also passed to it piece by piece as it is generated,
+        so speech can start early (M5); the return value is the same. Callers
+        only pass `on_text` when they want streaming, so clients that never
+        stream may leave it out.
         """
         ...

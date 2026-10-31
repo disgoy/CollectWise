@@ -403,3 +403,60 @@ def test_only_the_last_few_fixed_replies_are_kept(session) -> None:
 def test_the_system_prompt_explains_the_note() -> None:
     assert "bracketed note from CollectWise" in SYSTEM_PROMPT
     assert NOTE_PREFIX.startswith("[Note from CollectWise")
+
+
+# --- streaming text (M5.1) ----------------------------------------------------
+
+
+def test_streamed_text_covers_every_model_call_in_the_turn(session, db_session) -> None:
+    llm = FakeLLM([
+        use(("t1", "list_accounts", {}), text="Let me check. "),
+        say("You have one US dollar account."),
+    ])
+    pieces: list[str] = []
+
+    result = run_turn(session, "my accounts?", llm=llm, db=db_session, system=SYSTEM, on_text=pieces.append)
+
+    assert "".join(pieces) == "Let me check. You have one US dollar account."
+    assert result.reply == "You have one US dollar account."
+    assert [request["streamed"] for request in llm.requests] == [True, True]
+
+
+def test_without_a_listener_nothing_streams(session, db_session) -> None:
+    llm = FakeLLM([say("hi")])
+
+    turn(session, db_session, llm)
+
+    assert llm.requests[0]["streamed"] is False
+
+
+def test_streaming_changes_nothing_else(db_session) -> None:
+    seed_customer(db_session, "cust_a", [("acct_a_1", "USD", "active")])
+    script = lambda: [use(("t1", "list_accounts", {}), text="One moment. "), say("You have one account.")]  # noqa: E731
+    plain_session, streamed_session = SessionStore().create("cust_a"), SessionStore().create("cust_a")
+
+    plain = run_turn(plain_session, "hi", llm=FakeLLM(script()), db=db_session, system=SYSTEM)
+    streamed = run_turn(streamed_session, "hi", llm=FakeLLM(script()), db=db_session, system=SYSTEM,
+                        on_text=lambda _: None)
+
+    assert streamed == plain
+    assert streamed_session.messages[1:] == plain_session.messages[1:]
+    assert streamed_session.state == plain_session.state
+
+
+@pytest.mark.parametrize(
+    ("first_response", "fixed_reply"),
+    [
+        (LLMUnavailableError("timeout"), REPLY_UNAVAILABLE),
+        (FakeResponse(stop_reason="end_turn", content=[]), REPLY_EMPTY),
+    ],
+    ids=["unavailable", "empty"],
+)
+def test_fixed_replies_are_not_streamed(session, db_session, first_response, fixed_reply) -> None:
+    pieces: list[str] = []
+
+    result = run_turn(session, "hi", llm=FakeLLM([first_response]), db=db_session, system=SYSTEM,
+                      on_text=pieces.append)
+
+    assert result.reply == fixed_reply
+    assert pieces == []

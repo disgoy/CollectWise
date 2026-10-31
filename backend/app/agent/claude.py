@@ -1,6 +1,7 @@
 """LLMClient backed by the Anthropic Messages API (anthropic SDK 2.x)."""
 
 import logging
+from collections.abc import Callable
 from typing import Any
 
 import anthropic
@@ -15,6 +16,25 @@ FALLBACK_BETA = "server-side-fallback-2026-07-01"
 
 # Thinking counts toward max_tokens even though its text isn't returned.
 DEFAULT_MAX_TOKENS = 16000
+
+# Blocks a declined attempt can leave before a `fallback` block in a streamed
+# reply. They must not be sent back to the API, and a tool call from the
+# declined attempt must never run. Text before the boundary stays.
+_DECLINED_ATTEMPT_BLOCKS = {"thinking", "redacted_thinking", "tool_use", "server_tool_use"}
+
+
+def _without_declined_attempt(content: list[Any]) -> list[Any]:
+    """Drop what a mid-stream fallback leaves behind (docs: "Echoing fallback
+    turns back"). Non-streamed replies never contain it."""
+    types = [getattr(block, "type", None) for block in content]
+    if "fallback" not in types:
+        return content
+    boundary = len(types) - 1 - types[::-1].index("fallback")
+    return [
+        block
+        for index, block in enumerate(content)
+        if index >= boundary or types[index] not in _DECLINED_ATTEMPT_BLOCKS
+    ]
 
 
 def is_transient_error(exc: anthropic.APIError) -> bool:
@@ -48,6 +68,7 @@ class ClaudeClient:
         system: str,
         tools: list[dict[str, Any]],
         messages: list[dict[str, Any]],
+        on_text: Callable[[str], None] | None = None,
     ) -> LLMResponse:
         params: dict[str, Any] = {
             "model": self._model,
@@ -73,15 +94,24 @@ class ClaudeClient:
             "cache_control": {"type": "ephemeral"},
         }
 
+        if self._use_fallbacks:
+            messages_api = self._client.beta.messages
+            params |= {"betas": [FALLBACK_BETA], "fallbacks": "default"}
+        else:
+            messages_api = self._client.messages
+
         try:
-            if self._use_fallbacks:
-                response = self._client.beta.messages.create(
-                    **params,
-                    betas=[FALLBACK_BETA],
-                    fallbacks="default",
-                )
+            if on_text is None:
+                response = messages_api.create(**params)
             else:
-                response = self._client.messages.create(**params)
+                # The same request, streamed: text goes out as it arrives and
+                # the final message is returned as usual. An error can come
+                # after some text was already passed on.
+                with messages_api.stream(**params) as stream:
+                    for text in stream.text_stream:
+                        on_text(text)
+                    response = stream.get_final_message()
+                response.content = _without_declined_attempt(response.content)
         except anthropic.APIError as exc:
             if not is_transient_error(exc):
                 raise

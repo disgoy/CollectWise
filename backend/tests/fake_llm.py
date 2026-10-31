@@ -42,13 +42,19 @@ class FakeLLM:
     script: list[Any]
     requests: list[dict[str, Any]] = field(default_factory=list)
 
-    def create(self, *, system: str, tools: list[dict], messages: list[dict]) -> FakeResponse:
+    def create(self, *, system: str, tools: list[dict], messages: list[dict], **streaming) -> FakeResponse:
         self.requests.append(
-            {"system": system, "tools": tools, "messages": copy.deepcopy(messages)}
+            {"system": system, "tools": tools, "messages": copy.deepcopy(messages), "streamed": bool(streaming)}
         )
         if not self.script:
             raise AssertionError("FakeLLM script exhausted: the loop made an unexpected call")
         step = self.script.pop(0)
         if isinstance(step, Exception):
             raise step
+        if on_text := streaming.get("on_text"):
+            # Like the real stream: each text block in small pieces.
+            for block in step.content:
+                if isinstance(block, TextBlock):
+                    for start in range(0, len(block.text), 4):
+                        on_text(block.text[start:start + 4])
         return step
