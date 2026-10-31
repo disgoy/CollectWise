@@ -11,6 +11,9 @@ IS_SQLITE = DATABASE_URL.startswith("sqlite")
 
 engine = create_engine(
     DATABASE_URL,
+    # A database error names the statement but not its values (M6.3): those
+    # are customer ids, account ids and amounts, and errors end up in logs.
+    hide_parameters=True,
     # SQLite connections are thread-bound by default; FastAPI uses a thread pool.
     connect_args={"check_same_thread": False} if IS_SQLITE else {},
 )

@@ -372,8 +372,10 @@ def test_the_typed_route_answers_409_while_a_turn_is_running(agent_client, monke
 # --- the failure table stays honest -------------------------------------------------------
 
 
-def test_every_failure_mode_names_a_test_that_exists() -> None:
-    table = (REPO / "docs" / "FAILURE_MODES.md").read_text()
+def assert_named_tests_exist(doc: Path, *, at_least: int, node_at_least: int = 0) -> None:
+    """Every `test_...` a document names is a Python test, and every
+    node: "..." a Node test title."""
+    table = doc.read_text()
     python_tests = set(re.findall(r"`(test_[a-z0-9_]+)`", table))
     node_tests = set(re.findall(r'node: "([^"]+)"', table))
     tests = REPO / "backend" / "tests"
@@ -384,6 +386,10 @@ def test_every_failure_mode_names_a_test_that_exists() -> None:
     for path in (tests / "js").glob("*.test.mjs"):
         defined_node |= set(re.findall(r'^test\("([^"]+)"', path.read_text(), re.MULTILINE))
 
-    assert len(python_tests) >= 30 and len(node_tests) >= 2
+    assert len(python_tests) >= at_least and len(node_tests) >= node_at_least
     assert sorted(python_tests - defined_python) == []
     assert sorted(node_tests - defined_node) == []
+
+
+def test_every_failure_mode_names_a_test_that_exists() -> None:
+    assert_named_tests_exist(REPO / "docs" / "FAILURE_MODES.md", at_least=30, node_at_least=2)

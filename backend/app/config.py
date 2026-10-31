@@ -54,6 +54,11 @@ AGENT_EFFORT = os.environ.get("COLLECTWISE_AGENT_EFFORT", "medium")
 # hears "having trouble" after about 30 seconds at most.
 AGENT_TIMEOUT_S = float(os.environ.get("COLLECTWISE_AGENT_TIMEOUT_S", "15"))
 AGENT_MAX_RETRIES = int(os.environ.get("COLLECTWISE_AGENT_MAX_RETRIES", "1"))
+# Logs (M6.3): "text" (default) or "json", one object per line.
+LOG_FORMAT = os.environ.get("COLLECTWISE_LOG_FORMAT", "text")
+# Conversation events and voice/live timing rows older than this are deleted
+# by scripts/purge_old_data.py (M6.3). Servicing records are never purged.
+TELEMETRY_RETENTION_DAYS = int(os.environ.get("COLLECTWISE_TELEMETRY_RETENTION_DAYS", "30"))
 # Tracing (M6.2): unset = off, "console" = spans printed, "otlp" = sent to
 # OTEL_EXPORTER_OTLP_ENDPOINT (default http://localhost:4318).
 TRACING = os.environ.get("COLLECTWISE_TRACING")

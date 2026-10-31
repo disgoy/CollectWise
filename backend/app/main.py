@@ -18,8 +18,12 @@ from backend.app.api.demo import router as demo_router
 from backend.app.api.live_page import router as live_page_router
 from backend.app.api.live_page import static_files as live_static_files
 from backend.app import config, telemetry
+from backend.app.logging_setup import configure_logging
 
 logger = logging.getLogger(__name__)
+
+# At import, after uvicorn has set up its own loggers, so ours replace them.
+configure_logging(config.LOG_FORMAT)
 
 
 @asynccontextmanager

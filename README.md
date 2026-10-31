@@ -91,6 +91,8 @@ refuses paid runs until a person approves the harness with `--approve-harness`.
 | `COLLECTWISE_AGENT_EFFORT` | `medium` | Model effort level |
 | `COLLECTWISE_AGENT_TIMEOUT_S` | `15` | Longest wait for the next piece of a model reply before the caller hears "having trouble" |
 | `COLLECTWISE_AGENT_MAX_RETRIES` | `1` | Retries of a failed model call |
+| `COLLECTWISE_LOG_FORMAT` | `text` | `json` writes one JSON object per log line, with the trace id when tracing is on |
+| `COLLECTWISE_TELEMETRY_RETENTION_DAYS` | `30` | `python -m scripts.purge_old_data --yes` deletes conversation events and timing rows older than this; servicing records are never purged |
 | `COLLECTWISE_TRACING` | unset (off) | `console` prints trace spans; `otlp` sends them to `OTEL_EXPORTER_OTLP_ENDPOINT` (e.g. a local Jaeger). Spans hold codes and timings, never words |
 | `COLLECTWISE_TURN_LOCK_WAIT_S` | `5` | A typed message waits this long for the previous turn, then gets 409 |
 | `ANTHROPIC_API_KEY` | none | Anthropic credentials |
@@ -160,6 +162,8 @@ Open http://127.0.0.1:8000/live, sign in as the demo customer, press Start call
 and allow the microphone. Headphones work best. The page is plain HTML and
 JavaScript served by the app with a strict Content-Security-Policy; its logic
 is tested with `node --test backend/tests/js/` (also run by pytest).
+
+What is stored where, for how long, and what never is: [docs/DATA_HANDLING.md](docs/DATA_HANDLING.md).
 
 What happens when each part fails (the model, listening, speaking, the database, the caller's
 connection): [docs/FAILURE_MODES.md](docs/FAILURE_MODES.md), each row proven by a test.
