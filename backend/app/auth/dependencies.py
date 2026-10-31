@@ -23,6 +23,27 @@ def _unauthorized() -> HTTPException:
     )
 
 
+class SessionSecretNotConfigured(Exception):
+    """COLLECTWISE_SESSION_SECRET is missing or too short."""
+
+
+def customer_id_for_token(token: str) -> str:
+    """The customer ID in a valid session token (D39). Raises
+    InvalidSessionToken (the reason is for logs only) or
+    SessionSecretNotConfigured. Shared by the Bearer dependency below and the
+    live endpoint, whose token arrives as its first message (D83)."""
+    # Read at request time, so a missing secret is caught on every request.
+    secret = config.SESSION_TOKEN_SECRET
+    if not secret:
+        logger.error("COLLECTWISE_SESSION_SECRET is not set")
+        raise SessionSecretNotConfigured()
+    try:
+        return verify_session_token(token, secret=secret.encode("utf-8"))
+    except ValueError:
+        logger.error("COLLECTWISE_SESSION_SECRET is too short")
+        raise SessionSecretNotConfigured() from None
+
+
 def authenticated_customer_id(
     credentials: HTTPAuthorizationCredentials | None = Depends(_bearer),
 ) -> str:
@@ -30,9 +51,7 @@ def authenticated_customer_id(
 
     This is the only way caller identity enters the agent API (D39).
     """
-    # Read at request time, so a missing secret is caught on every request.
-    secret = config.SESSION_TOKEN_SECRET
-    if not secret:
+    if not config.SESSION_TOKEN_SECRET:
         logger.error("COLLECTWISE_SESSION_SECRET is not set")
         raise _NOT_CONFIGURED
 
@@ -40,13 +59,12 @@ def authenticated_customer_id(
         raise _unauthorized()
 
     try:
-        return verify_session_token(credentials.credentials, secret=secret.encode("utf-8"))
+        return customer_id_for_token(credentials.credentials)
     except InvalidSessionToken as exc:
         # The reason stays in our logs; the client gets one generic answer.
         logger.info("Rejected session token: %s", exc)
         raise _unauthorized() from None
-    except ValueError:
-        logger.error("COLLECTWISE_SESSION_SECRET is too short")
+    except SessionSecretNotConfigured:
         raise _NOT_CONFIGURED from None
 
 

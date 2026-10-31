@@ -297,19 +297,19 @@ class DeepgramLiveTTS:
     ) -> None:
         self._client = client
         self._voice = voice
-        self._sample_rate = sample_rate
+        self.sample_rate = sample_rate
 
     def _connection(self) -> AbstractAsyncContextManager:
         return self._client.speak.v1.connect(
             model=self._voice,
             encoding="linear16",
-            sample_rate=self._sample_rate,
+            sample_rate=self.sample_rate,
             mip_opt_out="true",
         )
 
     @asynccontextmanager
     async def open(self) -> AsyncIterator[_AuraSpeaker]:
-        speaker = _AuraSpeaker(self._connection, self._sample_rate)
+        speaker = _AuraSpeaker(self._connection, self.sample_rate)
         # Opened at the start of the call, so the first reply doesn't wait
         # for the handshake.
         await speaker.connect()

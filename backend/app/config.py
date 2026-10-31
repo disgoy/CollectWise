@@ -11,6 +11,16 @@ DATABASE_URL = os.environ.get("COLLECTWISE_DATABASE_URL", DEFAULT_DATABASE_URL)
 SESSION_TOKEN_SECRET = os.environ.get("COLLECTWISE_SESSION_SECRET")
 SESSION_TOKEN_TTL_SECONDS = int(os.environ.get("COLLECTWISE_SESSION_TTL_SECONDS", "3600"))
 
+# Demo sign-in (D84) for trying live calls locally: off unless set to "1",
+# and only for these synthetic customers. Anyone who can reach a server with
+# it on can act as them, so never switch it on anywhere public.
+DEMO_LOGIN = os.environ.get("COLLECTWISE_DEMO_LOGIN") == "1"
+DEMO_CUSTOMERS = tuple(
+    customer.strip()
+    for customer in os.environ.get("COLLECTWISE_DEMO_CUSTOMERS", "cust_demo").split(",")
+    if customer.strip()
+)
+
 # Key for the back-office API: /customers, /accounts, /servicing (D70). No
 # default: unset means those routes refuse every request.
 ADMIN_API_KEY = os.environ.get("COLLECTWISE_ADMIN_KEY")

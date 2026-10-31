@@ -90,6 +90,9 @@ class LiveSpeaker(Protocol):
 
 
 class LiveTextToSpeech(Protocol):
+    # The rate of the audio its speakers produce.
+    sample_rate: int
+
     def open(self) -> AbstractAsyncContextManager[LiveSpeaker]:
         """One speaker for one call."""
         ...

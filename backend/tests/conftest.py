@@ -26,6 +26,7 @@ from sqlalchemy.orm import Session, sessionmaker  # noqa: E402
 from sqlalchemy.pool import StaticPool  # noqa: E402
 
 from backend.app import config  # noqa: E402
+from backend.app.api.providers import get_db_factory  # noqa: E402
 from backend.app.api.rate_limits import (  # noqa: E402
     SlidingWindowLimiter,
     get_session_start_limiter,
@@ -63,6 +64,8 @@ def client() -> Generator[TestClient, None, None]:
             yield db
 
     app.dependency_overrides[get_db] = override_get_db
+    # Work outside a request (a live call) opens sessions on the same database.
+    app.dependency_overrides[get_db_factory] = lambda: TestSession
     # Fresh rate limits per test (shipped values), so one test's requests
     # never count against the next.
     turn_limiter = SlidingWindowLimiter(config.TURNS_PER_MINUTE)

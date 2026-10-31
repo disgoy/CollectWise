@@ -50,6 +50,23 @@ class FakeListener:
         self.events_in.put_nowait(_END)
 
 
+class ScriptedListener(FakeListener):
+    """Releases caller turns as audio arrives: after the n-th audio frame, the
+    turn scripted for n. For tests that reach the app through a real
+    WebSocket, whose event loop runs in another thread."""
+
+    def __init__(self, turns_after_frames: dict[int, str]) -> None:
+        super().__init__()
+        self.script = turns_after_frames
+        self.frames = 0
+
+    async def send_audio(self, chunk: bytes) -> None:
+        await super().send_audio(chunk)
+        self.frames += 1
+        if (text := self.script.get(self.frames)) is not None:
+            self.say_turn(text)
+
+
 @dataclass
 class FakeLiveSTT:
     listener: FakeListener = field(default_factory=FakeListener)
@@ -132,6 +149,7 @@ class FakeSpeaker:
 class FakeLiveTTS:
     speaker: FakeSpeaker = field(default_factory=FakeSpeaker)
     fail_to_open: bool = False
+    sample_rate: int = FakeSpeaker.sample_rate
 
     @asynccontextmanager
     async def open(self):

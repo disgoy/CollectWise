@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CollectWise live call</title>
+  <link rel="stylesheet" href="/live/static/live.css">
+  <script type="module" src="/live/static/app.mjs"></script>
+</head>
+<body>
+  <main>
+    <header>
+      <h1>CollectWise live call</h1>
+      <p class="note">A local demo with synthetic data. Headphones work best: the agent's voice can otherwise reach your microphone.</p>
+    </header>
+
+    <section id="sign-in" aria-labelledby="sign-in-title">
+      <h2 id="sign-in-title">Sign in</h2>
+      <div id="demo-customers"></div>
+      <p id="demo-off" class="note" hidden>Demo sign-in is off. Start the server with <code>COLLECTWISE_DEMO_LOGIN=1</code>, or use a token.</p>
+      <details id="token-sign-in">
+        <summary>Use a session token</summary>
+        <label for="token">Token</label>
+        <input id="token" type="password" autocomplete="off" spellcheck="false">
+        <button id="use-token" type="button">Use token</button>
+      </details>
+      <p id="signed-in" class="status" hidden></p>
+    </section>
+
+    <section id="call" aria-labelledby="call-title">
+      <h2 id="call-title">Call</h2>
+      <div class="controls">
+        <button id="start" type="button" disabled>Start call</button>
+        <button id="hang-up" type="button" disabled>Hang up</button>
+      </div>
+      <p id="status" class="status" role="status" aria-live="polite">Sign in to start.</p>
+      <p id="caption" class="caption" aria-live="polite"></p>
+    </section>
+
+    <section aria-labelledby="conversation-title">
+      <h2 id="conversation-title">Conversation</h2>
+      <ol id="conversation" aria-live="polite"></ol>
+    </section>
+  </main>
+</body>
+</html>

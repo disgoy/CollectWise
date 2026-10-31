@@ -100,6 +100,8 @@ refuses paid runs until a person approves the harness with `--approve-harness`.
 | `COLLECTWISE_SESSION_STARTS_PER_MINUTE` | `5` | New conversations per customer per minute; beyond it 429 |
 | `COLLECTWISE_PAYMENT_CONFIRM_TURNS` | `2` | A proposed payment can be confirmed only within this many further caller turns |
 | `COLLECTWISE_PAYMENT_CONFIRM_MINUTES` | `5` | ...and within this many minutes; after that the agent proposes it again |
+| `COLLECTWISE_DEMO_LOGIN` | unset (off) | `1` turns on demo sign-in for the live-call page; local only, never on a public server |
+| `COLLECTWISE_DEMO_CUSTOMERS` | `cust_demo` | Comma-separated synthetic customers demo sign-in may act as |
 | `COLLECTWISE_VOICE_MIN_CONFIDENCE` | `0.6` | Voice turns heard with lower speech-to-text confidence get "say that again" instead of reaching the agent |
 
 To hear the voice turn end to end (real Deepgram and Claude, a few cents):
@@ -133,6 +135,41 @@ agent routes and `/health` should be reachable from the internet.
 | POST | `/agent/sessions` | Start a conversation (Bearer session token) |
 | POST | `/agent/sessions/{session_id}/turns` | Send a typed caller turn |
 | POST | `/agent/sessions/{session_id}/voice-turns` | Send a spoken caller turn (WAV body); returns transcript, reply and base64 WAV audio |
+| WS | `/agent/sessions/{session_id}/live` | A live voice call: the first message carries the session token; 16 kHz PCM in, captions, sentences and 24 kHz audio out; the caller can interrupt |
+
+### Try a live call in the browser
+
+Real (paid) Deepgram and Claude calls; synthetic data only.
+
+```bash
+python -m scripts.seed_demo
+set -a; source .env; set +a
+COLLECTWISE_DEMO_LOGIN=1 COLLECTWISE_AGENT_LLM=anthropic COLLECTWISE_SPEECH=deepgram uvicorn backend.app.main:app
+```
+
+Open http://127.0.0.1:8000/live, sign in as the demo customer, press Start call
+and allow the microphone. Headphones work best. The page is plain HTML and
+JavaScript served by the app with a strict Content-Security-Policy; its logic
+is tested with `node --test backend/tests/js/` (also run by pytest).
+
+### Live call protocol
+
+`WS /agent/sessions/{session_id}/live`. The first message must be
+`{"type": "start", "token": "<session token>"}` within 5 seconds; then the
+server sends `{"type": "ready", "sample_rate_in": 16000, "sample_rate_out": 24000}`.
+
+- Caller to server: binary frames of mono 16-bit PCM at 16 kHz (80 ms
+  recommended, at most 200 ms, no faster than real time);
+  `{"type": "segment_played", "reply", "segment"}` when a segment has played;
+  `{"type": "playback_stopped", "reply", "played": [...]}` after a stop;
+  `{"type": "hang_up"}`. Unknown types are ignored.
+- Server to caller: `caption`, `caller_said`, `agent_sentence`, `segment_end`,
+  `stop_playback`, `reply_done`, `call_ended` as JSON; audio as binary frames
+  with an 8-byte header (reply, segment as little-endian uint32) followed by
+  24 kHz PCM.
+- Close codes: 1000 normal, 4400 malformed or audio too fast, 4401 bad token,
+  4404 session not found, 4408 no start in time, 4409 already live,
+  4503 not configured.
 
 ## Roadmap
 

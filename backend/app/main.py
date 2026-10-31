@@ -13,6 +13,11 @@ from backend.app.api.accounts import router as accounts_router
 from backend.app.api.servicing import router as servicing_router
 from backend.app.api.agent import router as agent_router
 from backend.app.api.voice import router as voice_router
+from backend.app.api.live import router as live_router
+from backend.app.api.demo import router as demo_router
+from backend.app.api.live_page import router as live_page_router
+from backend.app.api.live_page import static_files as live_static_files
+from backend.app import config
 
 logger = logging.getLogger(__name__)
 
@@ -20,6 +25,11 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     create_tables()
+    if config.DEMO_LOGIN:
+        logger.warning(
+            "Demo sign-in is ON (COLLECTWISE_DEMO_LOGIN=1): anyone who can reach this server can act as "
+            "the demo customers %s. Never use it on a public server.", ", ".join(config.DEMO_CUSTOMERS),
+        )
     yield
 
 
@@ -35,6 +45,10 @@ app.include_router(accounts_router)
 app.include_router(servicing_router)
 app.include_router(agent_router)
 app.include_router(voice_router)
+app.include_router(live_router)
+app.include_router(demo_router)
+app.include_router(live_page_router)
+app.mount("/live/static", live_static_files, name="live-static")
 
 
 # Liveness: the process answers. No dependencies, so a database outage never

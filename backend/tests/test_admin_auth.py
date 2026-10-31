@@ -9,7 +9,7 @@ on a router this file doesn't list would still escape.
 """
 
 import pytest
-from fastapi.routing import APIRoute
+from fastapi.routing import APIRoute, APIWebSocketRoute
 from fastapi.testclient import TestClient
 from sqlalchemy import func, select
 
@@ -18,12 +18,22 @@ from backend.app.auth.dependencies import ADMIN_KEY_HEADER
 from backend.app.auth.session_tokens import issue_session_token
 from backend.app.db import models
 from backend.app.db.session import get_db
-from backend.app.api import accounts, agent, customers, servicing, voice
+from backend.app.api import accounts, agent, customers, demo, live, live_page, servicing, voice
 from backend.app.main import app
 
 BACK_OFFICE_PREFIXES = ("/customers", "/accounts", "/servicing")
-# The only routes anyone may call: liveness and readiness (H5).
-OPEN_ROUTES = {("GET", "/health"), ("GET", "/health/ready")}
+ROUTER_MODULES = (accounts, agent, customers, demo, live, live_page, servicing, voice)
+# WebSocket routes aren't in the OpenAPI schema, so they are listed here; each
+# signs in by its first message and has its own tests (test_live_api.py, D83).
+WEBSOCKET_ROUTES = {"/agent/sessions/{session_id}/live"}
+# The only routes anyone may call: liveness and readiness (H5), and demo
+# sign-in, which answers 404 unless switched on (D84; tests in test_demo.py).
+OPEN_ROUTES = {
+    ("GET", "/health"), ("GET", "/health/ready"),
+    ("GET", "/demo/customers"), ("POST", "/demo/sign-in"),
+}
+# Routes deliberately left out of the schema: the live-call page (D84).
+HIDDEN_ROUTES = {"/live"}
 
 # Every back-office route, with a body that would succeed with the key.
 ROUTES = [
@@ -113,11 +123,12 @@ def test_every_route_is_back_office_agent_or_health() -> None:
 
 
 def test_no_route_is_hidden_from_the_schema() -> None:
-    routes = [*app.routes, *(r for module in (accounts, agent, customers, servicing, voice) for r in module.router.routes)]
+    routes = [*app.routes, *(r for module in ROUTER_MODULES for r in module.router.routes)]
     api_routes = [route for route in routes if isinstance(route, APIRoute)]
 
-    assert len(api_routes) == len(OPERATIONS)
-    assert all(route.include_in_schema for route in api_routes)
+    hidden = {route.path for route in api_routes if not route.include_in_schema}
+    assert hidden == HIDDEN_ROUTES
+    assert len(api_routes) - len(hidden) == len(OPERATIONS)
 
 
 @pytest.mark.parametrize(
@@ -220,3 +231,21 @@ def test_the_admin_key_does_not_open_the_agent(anonymous) -> None:
 def test_health_checks_need_no_key(anonymous) -> None:
     assert anonymous.get("/health").status_code == 200
     assert anonymous.get("/health/ready").status_code == 200
+
+
+def test_every_websocket_route_is_known_and_signs_in() -> None:
+    # The schema-based inventory above can't see WebSocket routes.
+    routes = [*app.routes, *(r for module in ROUTER_MODULES for r in module.router.routes)]
+    websocket_paths = {r.path for r in routes if isinstance(r, APIWebSocketRoute)}
+
+    assert websocket_paths == WEBSOCKET_ROUTES
+
+
+def test_the_live_route_refuses_a_caller_who_doesnt_sign_in(client) -> None:
+    from starlette.websockets import WebSocketDisconnect
+
+    with client.websocket_connect("/agent/sessions/sess_x/live") as ws:
+        ws.send_text('{"type": "start", "token": "not-a-token"}')
+        with pytest.raises(WebSocketDisconnect) as closed:
+            ws.receive_text()
+    assert closed.value.code == 4401
