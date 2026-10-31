@@ -297,9 +297,9 @@ def main(argv: list[str] | None = None, session_factory=None) -> int:
     parser.add_argument("--out", type=Path, default=OUTPUT)
     args = parser.parse_args(argv)
     if session_factory is None:
-        from backend.app.db.session import SessionLocal, create_tables
+        from backend.app.db.session import SessionLocal, require_current_schema
 
-        create_tables()
+        require_current_schema()
         session_factory = SessionLocal
     with session_factory() as db:
         data = build(db)

@@ -7,6 +7,7 @@ from sqlalchemy.exc import IntegrityError, StatementError
 from sqlalchemy.orm import sessionmaker
 
 from backend.app.db import models
+from backend.tests.databases import POSTGRES
 
 
 def test_customer_can_be_saved_and_retrieved(db_session):
@@ -277,6 +278,7 @@ def test_naive_timestamp_is_rejected(db_session):
     db_session.rollback()
 
 
+@pytest.mark.skipif(POSTGRES, reason="SQLite files only: Postgres timestamptz always stores the offset")
 def test_rows_written_without_offset_are_read_as_utc(db_session):
     # Rows already in an existing collectwise.db were stored without an offset.
     db_session.connection().exec_driver_sql(

@@ -21,7 +21,7 @@ from sqlalchemy.orm import Session
 
 from backend.app import config
 from backend.app.db.models import ConversationEventRecord, LiveTurnMetricRecord, VoiceTurnMetricRecord
-from backend.app.db.session import SessionLocal, create_tables
+from backend.app.db.session import SessionLocal, require_current_schema
 
 # Telemetry only: the servicing tables are deliberately not listed.
 PURGEABLE = (ConversationEventRecord, VoiceTurnMetricRecord, LiveTurnMetricRecord)
@@ -51,7 +51,7 @@ def main(argv: list[str] | None = None, session_factory=SessionLocal) -> int:
     parser.add_argument("--yes", action="store_true", help="delete (otherwise only count)")
     args = parser.parse_args(argv)
     if session_factory is SessionLocal:
-        create_tables()
+        require_current_schema()
     with session_factory() as db:
         counts = purge(db, days=args.days, now=datetime.now(timezone.utc), apply=args.yes)
     print(f"{'Deleted' if args.yes else 'Would delete'} rows older than {args.days} days:")

@@ -30,6 +30,7 @@ from backend.app.voice.live_call import (
 )
 from backend.tests.fake_live_speech import FakeLink, FakeLiveSTT, FakeLiveTTS, FakeSpeaker
 from backend.tests.fake_llm import FakeLLM, FakeResponse, TextBlock, say, use
+from backend.tests.databases import make_test_engine
 from backend.tests.helpers import seed_customer
 
 SYSTEM = "test system prompt"
@@ -39,13 +40,7 @@ SYSTEM = "test system prompt"
 def db_factory():
     # One in-memory database shared across threads: the agent runs on a
     # worker thread.
-    engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
-
-    @event.listens_for(engine, "connect")
-    def foreign_keys(connection, _):
-        connection.execute("PRAGMA foreign_keys=ON")
-
-    Base.metadata.create_all(bind=engine)
+    engine = make_test_engine()
     factory = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
     with factory() as db:
         seed_customer(db, "cust_a", [("acct_a_1", "USD", "active")])

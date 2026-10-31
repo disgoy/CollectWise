@@ -12,6 +12,7 @@ from backend.app.db import models
 from backend.app.db.base import Base
 from backend.app.db.session import get_db
 from backend.app.main import app
+from backend.tests.databases import make_test_engine
 from backend.tests.helpers import ADMIN_HEADERS
 
 
@@ -19,17 +20,8 @@ from backend.tests.helpers import ADMIN_HEADERS
 def concurrency_client(
     tmp_path,
 ) -> Generator[TestClient, None, None]:
-    database_path = tmp_path / "concurrency.db"
-    test_engine = create_engine(
-        f"sqlite:///{database_path}",
-        connect_args={"check_same_thread": False, "timeout": 10},
-    )
-
-    @event.listens_for(test_engine, "connect")
-    def enable_foreign_keys(connection, _):
-        connection.execute("PRAGMA foreign_keys=ON")
-
-    Base.metadata.create_all(bind=test_engine)
+    # Real separate connections, so the requests truly race (see conftest).
+    test_engine = make_test_engine(concurrent=True)
 
     TestSession = sessionmaker(
         bind=test_engine,

@@ -8,7 +8,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from backend.app.api.customers import router as customers_router
-from backend.app.db.session import create_tables, get_db
+from backend.app.db.session import UPGRADE_HINT, engine, get_db, head_revision, schema_is_current, schema_revision
 from backend.app.api.accounts import router as accounts_router
 from backend.app.api.servicing import router as servicing_router
 from backend.app.api.agent import router as agent_router
@@ -28,7 +28,11 @@ configure_logging(config.LOG_FORMAT)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    create_tables()
+    # The schema comes from migrations, run on purpose (M6.4); a server on an
+    # old schema says so and reports not ready rather than half-working.
+    if not schema_is_current(engine):
+        logger.error("Database schema is out of date (%s, need %s). %s",
+                     schema_revision(engine) or "no migrations", head_revision(), UPGRADE_HINT)
     telemetry.configure(config.TRACING)
     if config.DEMO_LOGIN:
         logger.warning(
@@ -91,9 +95,12 @@ def health_check() -> dict[str, str]:
 def readiness_check(db: Session = Depends(get_db)) -> JSONResponse:
     try:
         db.execute(text("SELECT 1"))
+        current = schema_is_current(db.connection())
     except SQLAlchemyError as exc:
         # The type only: a database error message can include the connection
         # string, credentials and all.
         logger.error("Readiness check failed: database unavailable (%s)", type(exc).__name__)
         return JSONResponse(status_code=503, content={"status": "not_ready"})
+    if not current:
+        return JSONResponse(status_code=503, content={"status": "not_ready", "reason": "schema_out_of_date"})
     return JSONResponse(content={"status": "ready"})

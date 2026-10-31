@@ -25,7 +25,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from backend.app.db.models import ConversationEventRecord, LiveTurnMetricRecord
-from backend.app.db.session import SessionLocal, create_tables
+from backend.app.db.session import SessionLocal, require_current_schema
 
 
 def percentile(values: list[float], fraction: float) -> float:
@@ -148,7 +148,7 @@ def main(argv: list[str] | None = None, session_factory=SessionLocal) -> int:
     parser.add_argument("--session", help="only this conversation (session id)")
     args = parser.parse_args(argv)
     if session_factory is SessionLocal:
-        create_tables()  # an empty report rather than an error on a fresh database
+        require_current_schema()
     with session_factory() as db:
         rows = load(db, minutes=args.minutes, session_id=args.session)
         print(summarize(rows, load_events(db, rows)))

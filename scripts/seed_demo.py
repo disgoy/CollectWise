@@ -13,7 +13,7 @@ import sys
 from decimal import Decimal
 
 from backend.app.db.models import CustomerRecord
-from backend.app.db.session import SessionLocal, create_tables
+from backend.app.db.session import SessionLocal, require_current_schema
 from backend.app.schemas.domain import AccountStatus
 from backend.app.services.accounts import create_account, get_account_details
 
@@ -25,7 +25,7 @@ ACCOUNTS = [
 
 
 def main() -> int:
-    create_tables()
+    require_current_schema()
     with SessionLocal() as db:
         customer_id, name = CUSTOMER
         if db.get(CustomerRecord, customer_id) is None:

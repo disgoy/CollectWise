@@ -4,8 +4,8 @@ import tempfile
 # Must be set before the app is imported, so the app's own engine never
 # points at the real collectwise.db file during tests. Use a temporary file,
 # not in-memory "sqlite://": in-memory SQLite gets SingletonThreadPool, which
-# breaks when several TestClient startups run create_tables() from different
-# threads at once (as the concurrency test does).
+# breaks when several TestClient startups use it from different threads at
+# once (as the concurrency test does). It is migrated below, like a real one.
 _test_db_dir = tempfile.mkdtemp(prefix="collectwise-tests-")
 os.environ["COLLECTWISE_DATABASE_URL"] = f"sqlite:///{_test_db_dir}/app.db"
 # Tests use their own session-token secret, never the developer's real one.
@@ -21,9 +21,7 @@ from collections.abc import Generator  # noqa: E402
 
 import pytest  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
-from sqlalchemy import create_engine, event  # noqa: E402
 from sqlalchemy.orm import Session, sessionmaker  # noqa: E402
-from sqlalchemy.pool import StaticPool  # noqa: E402
 
 from backend.app import config  # noqa: E402
 from backend.app.api.providers import get_db_factory  # noqa: E402
@@ -33,26 +31,27 @@ from backend.app.api.rate_limits import (  # noqa: E402
     get_turn_limiter,
 )
 from backend.app.db import models  # noqa: E402, F401  Registers the SQLAlchemy models
-from backend.app.db.base import Base  # noqa: E402
-from backend.app.db.session import get_db  # noqa: E402
+from backend.app.db.session import get_db, upgrade_to_head  # noqa: E402
 from backend.app.main import app  # noqa: E402
+from backend.tests.databases import POSTGRES, make_test_engine, stop_postgres  # noqa: E402
 from backend.tests.helpers import ADMIN_HEADERS  # noqa: E402
+
+# The app's own (temporary) database gets the real migrations, every run.
+upgrade_to_head(config.DATABASE_URL)
+
+
+def pytest_sessionfinish(session, exitstatus) -> None:
+    stop_postgres()
+
+
+def pytest_report_header(config) -> str:
+    return "test databases: Postgres (throwaway cluster)" if POSTGRES else "test databases: SQLite"
 
 
 @pytest.fixture
 def client() -> Generator[TestClient, None, None]:
-    # One in-memory database per test, shared across connections by StaticPool.
-    test_engine = create_engine(
-        "sqlite://",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-    )
-
-    @event.listens_for(test_engine, "connect")
-    def enable_foreign_keys(connection, _):
-        connection.execute("PRAGMA foreign_keys=ON")
-
-    Base.metadata.create_all(bind=test_engine)
+    # A fresh database per test (see make_test_engine).
+    test_engine = make_test_engine()
     TestSession = sessionmaker(
         bind=test_engine,
         autoflush=False,
@@ -85,14 +84,8 @@ def client() -> Generator[TestClient, None, None]:
 
 @pytest.fixture
 def db_session() -> Generator[Session, None, None]:
-    # A separate in-memory database for tests that use the DB without HTTP.
-    test_engine = create_engine("sqlite:///:memory:")
-
-    @event.listens_for(test_engine, "connect")
-    def enable_foreign_keys(connection, _):
-        connection.execute("PRAGMA foreign_keys=ON")
-
-    Base.metadata.create_all(bind=test_engine)
+    # A separate database for tests that use the DB without HTTP.
+    test_engine = make_test_engine()
     TestSession = sessionmaker(
         bind=test_engine,
         autoflush=False,

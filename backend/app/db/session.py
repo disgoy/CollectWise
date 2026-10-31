@@ -1,10 +1,16 @@
 from collections.abc import Generator
+from pathlib import Path
 
-from sqlalchemy import create_engine, event
+from alembic import command
+from alembic.config import Config
+from alembic.runtime.migration import MigrationContext
+from alembic.script import ScriptDirectory
+from sqlalchemy import Connection, Engine, create_engine, event
 from sqlalchemy.orm import Session, sessionmaker
 
 from backend.app.config import DATABASE_URL
-from backend.app.db.base import Base
+
+ALEMBIC_INI = Path(__file__).resolve().parents[3] / "alembic.ini"
 
 
 IS_SQLITE = DATABASE_URL.startswith("sqlite")
@@ -38,11 +44,50 @@ SessionLocal = sessionmaker(
 )
 
 
-def create_tables() -> None:
-    # Import models so SQLAlchemy registers their table definitions.
-    from backend.app.db import models  # noqa: F401
+# --- the schema (M6.4): Alembic migrations, never create_all ---------------
 
-    Base.metadata.create_all(bind=engine)
+
+class SchemaOutOfDate(Exception):
+    """The database isn't at the latest migration."""
+
+
+UPGRADE_HINT = "Run `alembic upgrade head` (see README: Database)."
+
+
+def alembic_config(url: str | None = None) -> Config:
+    config = Config(str(ALEMBIC_INI))
+    if url is not None:
+        config.set_main_option("sqlalchemy.url", url.replace("%", "%%"))
+    return config
+
+
+def head_revision() -> str:
+    return ScriptDirectory.from_config(alembic_config()).get_current_head()
+
+
+def schema_revision(bind: Engine | Connection) -> str | None:
+    """The database's migration revision; None when it has none."""
+    if isinstance(bind, Engine):
+        with bind.connect() as connection:
+            return MigrationContext.configure(connection).get_current_revision()
+    return MigrationContext.configure(bind).get_current_revision()
+
+
+def schema_is_current(bind: Engine | Connection) -> bool:
+    return schema_revision(bind) == head_revision()
+
+
+def require_current_schema(bind: Engine | Connection | None = None) -> None:
+    """For scripts: stop with what to run, rather than work on a database
+    whose tables are missing or old."""
+    revision = schema_revision(engine if bind is None else bind)
+    if revision != head_revision():
+        found = "no migrations" if revision is None else f"revision {revision}"
+        raise SchemaOutOfDate(f"The database has {found}; the code needs {head_revision()}. {UPGRADE_HINT}")
+
+
+def upgrade_to_head(url: str) -> None:
+    command.upgrade(alembic_config(url), "head")
 
 
 def get_db() -> Generator[Session, None, None]:

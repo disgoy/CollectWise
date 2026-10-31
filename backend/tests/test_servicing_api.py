@@ -6,7 +6,7 @@ from sqlalchemy import func, select
 from backend.app.db import models
 from backend.app.db.session import get_db
 from backend.app.main import app
-from backend.tests.helpers import ADMIN_HEADERS
+from backend.tests.helpers import ADMIN_HEADERS, reject_policy_audit_events
 
 
 def seed_account(
@@ -578,16 +578,7 @@ def test_audit_event_failure_rolls_back_servicing_request(
     db = next(db_generator)
 
     try:
-        db.connection().exec_driver_sql(
-            """
-            CREATE TRIGGER reject_policy_event
-            BEFORE INSERT ON servicing_audit_events
-            WHEN NEW.event_type = 'policy_evaluated'
-            BEGIN
-                SELECT RAISE(ABORT, 'simulated audit insert failure');
-            END;
-            """
-        )
+        reject_policy_audit_events(db.connection())
         db.commit()
     finally:
         db_generator.close()

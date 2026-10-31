@@ -18,7 +18,7 @@ a servicing request is evaluated and recorded, never executed.
 - Audit trail saved in the same transaction as each decision
 - Back-office routes (`/customers`, `/accounts`, `/servicing`) need an admin
   key; callers reach the agent routes with a signed session token
-- SQLite database via SQLAlchemy
+- SQLite (default) or Postgres via SQLAlchemy, with Alembic migrations
 
 ## Setup
 
@@ -28,6 +28,45 @@ Requires Python 3.11.
 python3.11 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements-dev.txt
+```
+
+## Database
+
+The schema comes from migrations, never from the app: bring a database to the
+latest version with
+
+```bash
+alembic upgrade head
+```
+
+A server on an older schema logs what to run and answers 503
+`schema_out_of_date` on `/health/ready`; scripts stop with the same advice.
+
+**A `collectwise.db` made before migrations existed** (before Milestone 6.4) is
+adopted once, keeping its rows:
+
+```bash
+alembic stamp 0001
+```
+
+```bash
+alembic upgrade head
+```
+
+**Postgres:** create a database of its own and point the app at it (the
+default stays SQLite, `sqlite:///./collectwise.db`):
+
+```bash
+export COLLECTWISE_DATABASE_URL="postgresql+psycopg://localhost/collectwise"
+```
+
+then `alembic upgrade head`. To run the whole test suite on Postgres instead
+of SQLite (it starts a throwaway cluster of its own with `initdb` and
+`pg_ctl`, on a private socket, and deletes it afterwards; no other Postgres
+server is touched):
+
+```bash
+COLLECTWISE_TEST_POSTGRES=1 python -m pytest -q
 ```
 
 ## Run the API

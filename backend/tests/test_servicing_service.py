@@ -18,6 +18,7 @@ from backend.app.services.servicing import (
     list_customer_payment_requests,
     preview_servicing_request,
 )
+from backend.tests.helpers import reject_policy_audit_events
 
 
 def seed_account(
@@ -184,16 +185,7 @@ def test_lost_insert_race_returns_the_winning_decision(
 
 def test_audit_failure_rolls_back_request_and_events(db_session: Session) -> None:
     seed_account(db_session)
-    db_session.connection().exec_driver_sql(
-        """
-        CREATE TRIGGER reject_policy_event
-        BEFORE INSERT ON servicing_audit_events
-        WHEN NEW.event_type = 'policy_evaluated'
-        BEGIN
-            SELECT RAISE(ABORT, 'simulated audit insert failure');
-        END;
-        """
-    )
+    reject_policy_audit_events(db_session.connection())
     db_session.commit()
 
     with pytest.raises(IntegrityError):
