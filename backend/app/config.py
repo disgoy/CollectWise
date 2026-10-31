@@ -56,3 +56,7 @@ TTS_VOICE = os.environ.get("COLLECTWISE_TTS_VOICE", "aura-2-thalia-en")
 LIVE_STT_MODEL = os.environ.get("COLLECTWISE_LIVE_STT_MODEL", "flux-general-en")
 EOT_THRESHOLD = float(os.environ.get("COLLECTWISE_EOT_THRESHOLD", "0.7"))
 EOT_TIMEOUT_MS = int(os.environ.get("COLLECTWISE_EOT_TIMEOUT_MS", "5000"))
+# Live turns heard with a lower mean word confidence get "say that again".
+# Provisional: D69's 0.6 was measured on nova-3's per-utterance confidence,
+# not Flux's per-word scores; re-measure with a real voice (5.7).
+LIVE_MIN_CONFIDENCE = float(os.environ.get("COLLECTWISE_LIVE_MIN_CONFIDENCE", "0.6"))

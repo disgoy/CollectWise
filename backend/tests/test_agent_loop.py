@@ -206,7 +206,7 @@ def test_after_handoff_the_model_is_not_called(session, db_session) -> None:
 
     second = turn(session, db_session, llm, "hello?")
 
-    assert second == type(second)(reply=REPLY_HANDED_OFF, handed_off=True)
+    assert second == type(second)(reply=REPLY_HANDED_OFF, handed_off=True, fixed_reply=True)
     assert len(llm.requests) == 2
     assert session.state.turn == 1
 

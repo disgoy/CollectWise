@@ -67,6 +67,9 @@ class TurnResult:
     reply: str
     handed_off: bool
     tool_calls: list[ToolCallRecord] = field(default_factory=list)
+    # True when `reply` is one of the fixed replies above rather than the
+    # model's words, so a live call knows to speak it (M5.3).
+    fixed_reply: bool = False
 
 
 def _tool_result_content(result: ToolResult) -> str:
@@ -161,6 +164,7 @@ def _run_turn(
             reply=reply,
             handed_off=state.handoff is not None,
             tool_calls=tool_calls,
+            fixed_reply=outcome != "reply",
         )
 
     # After a handoff the agent no longer converses (D33).

@@ -314,6 +314,47 @@ class VoiceTurnMetricRecord(Base):
     )
 
 
+class LiveTurnMetricRecord(Base):
+    """One row per caller turn in a live call (M5.3): timings and codes, never
+    words (D40, D60). A new table: columns added to voice_turn_metrics
+    wouldn't reach existing databases without migrations (D16)."""
+
+    __tablename__ = "live_turn_metrics"
+
+    metric_id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    session_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    customer_id: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
+    # The conversation's caller-turn count after this turn.
+    turn: Mapped[int] = mapped_column(nullable=False)
+    outcome: Mapped[str] = mapped_column(String(30), nullable=False)
+    # Word confidences of the final transcript; None when there were none.
+    confidence_mean: Mapped[float | None] = mapped_column(Float, nullable=True)
+    confidence_min: Mapped[float | None] = mapped_column(Float, nullable=True)
+    transcript_chars: Mapped[int] = mapped_column(nullable=False)
+    reply_chars: Mapped[int] = mapped_column(nullable=False)
+    sentences: Mapped[int] = mapped_column(nullable=False)
+    # From the end of the caller's turn; None when it never happened (no
+    # streamed text, or speech failed).
+    first_text_ms: Mapped[int | None] = mapped_column(nullable=True)
+    first_audio_ms: Mapped[int | None] = mapped_column(nullable=True)
+    agent_ms: Mapped[int | None] = mapped_column(nullable=True)
+    # False when the reply could only be shown as text.
+    audio_ok: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        UTCDateTime(),
+        default=lambda: datetime.now(timezone.utc),
+        nullable=False,
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "outcome IN ('reply', 'not_understood', 'too_long', 'already_handed_off')",
+            name="ck_live_turn_metrics_outcome",
+        ),
+        CheckConstraint("turn >= 0", name="ck_live_turn_metrics_turn"),
+    )
+
+
 class AccountLabelRecord(Base):
     """A spoken name for an account, such as "savings" (D58). Its own table,
     not a column on accounts, because create_all never alters tables (D16)."""

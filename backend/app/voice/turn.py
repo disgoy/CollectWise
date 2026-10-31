@@ -18,17 +18,17 @@ from backend.app.agent.loop import REPLY_HANDED_OFF, run_turn
 from backend.app.agent.sessions import ConversationSession
 from backend.app.services.voice_metrics import VoiceTurnMetric, record_voice_turn_metric
 from backend.app.voice.audio import AudioClip
+from backend.app.voice.guard import (  # noqa: F401  the constants are also imported from here
+    MAX_TRANSCRIPT_CHARS,
+    REPLY_CANT_HEAR,
+    REPLY_NOT_UNDERSTOOD,
+    REPLY_TOO_LONG,
+    check_transcript,
+)
 from backend.app.voice.speech import SpeechToText, SpeechUnavailableError, TextToSpeech
 
 logger = logging.getLogger(__name__)
 
-# The same limit as a typed turn.
-MAX_TRANSCRIPT_CHARS = 2000
-
-# Fixed replies for turns the agent never sees. They promise nothing.
-REPLY_NOT_UNDERSTOOD = "Sorry, I didn't catch that. Could you say it again?"
-REPLY_TOO_LONG = "Sorry, that was a lot at once. Could you say it more briefly?"
-REPLY_CANT_HEAR = "Sorry, I'm having trouble hearing right now. Please try again in a moment."
 # Outcomes where the caller hears one of the replies above instead of the agent.
 GUARD_OUTCOMES = {"stt_unavailable", "not_understood", "too_long"}
 
@@ -79,12 +79,10 @@ def run_voice_turn(
         else:
             transcript = heard.text.strip()
             confidence = heard.confidence
-            unsure = confidence is not None and confidence < config.VOICE_MIN_CONFIDENCE
-            if not transcript or unsure:
+            guard = check_transcript(transcript, confidence, min_confidence=config.VOICE_MIN_CONFIDENCE)
+            if guard.reply is not None:
                 # Not a caller turn: the turn counter doesn't move (D24).
-                reply, outcome = REPLY_NOT_UNDERSTOOD, "not_understood"
-            elif len(transcript) > MAX_TRANSCRIPT_CHARS:
-                reply, outcome = REPLY_TOO_LONG, "too_long"
+                reply, outcome = guard.reply, guard.outcome
             else:
                 started = time.perf_counter()
                 result = run_turn(session, transcript, llm=llm, db=db, system=system)
