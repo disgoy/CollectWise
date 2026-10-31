@@ -51,6 +51,9 @@ class FakeLLM:
         step = self.script.pop(0)
         if isinstance(step, Exception):
             raise step
+        if hasattr(step, "create"):
+            # A scripted model of its own for this call (e.g. one that waits).
+            return step.create(system=system, tools=tools, messages=messages, **streaming)
         if on_text := streaming.get("on_text"):
             # Like the real stream: each text block in small pieces.
             for block in step.content:

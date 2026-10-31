@@ -55,7 +55,7 @@ def db_factory():
 
 
 class Call:
-    def __init__(self, db_factory, llm, *, stt=None, tts=None, keyterms=()) -> None:
+    def __init__(self, db_factory, llm, *, stt=None, tts=None, keyterms=(), turn_limiter=None, clock=None) -> None:
         self.session = SessionStore().create("cust_a")
         self.stt = stt or FakeLiveSTT()
         self.tts = tts or FakeLiveTTS()
@@ -63,6 +63,8 @@ class Call:
         self.llm = llm
         self.db_factory = db_factory
         self.keyterms = keyterms
+        self.turn_limiter = turn_limiter
+        self.clock = clock
         self.task: asyncio.Task | None = None
 
     @property
@@ -77,6 +79,7 @@ class Call:
         self.task = asyncio.create_task(run_live_call(
             self.session, self.link, stt=self.stt, tts=self.tts, llm=self.llm,
             db_factory=self.db_factory, system=SYSTEM, keyterms=self.keyterms,
+            turn_limiter=self.turn_limiter, **({"clock": self.clock} if self.clock else {}),
         ))
 
     async def end(self) -> str:
@@ -227,7 +230,9 @@ def test_a_reply_whose_audio_comes_at_the_end_completes(db_factory) -> None:
     assert len(call.link.of(AgentAudio)) == 3
 
 
-def test_turns_that_end_while_the_agent_is_busy_wait_their_turn(db_factory) -> None:
+def test_in_a_text_only_call_turns_that_end_while_the_agent_is_busy_wait_their_turn(db_factory) -> None:
+    # With a voice, speaking over the agent interrupts it (5.4, tested below);
+    # with text only there is nothing to interrupt, so the turn waits.
     llm = GatedLLM("First answer. ", "Done.")
 
     class TwoTurns:
@@ -240,7 +245,7 @@ def test_turns_that_end_while_the_agent_is_busy_wait_their_turn(db_factory) -> N
             kwargs["on_text"]("Second answer.")
             return FakeResponse("end_turn", [TextBlock("Second answer.")])
 
-    call = Call(db_factory, TwoTurns())
+    call = Call(db_factory, TwoTurns(), tts=FakeLiveTTS(fail_to_open=True))
 
     async def go():
         call.start()
@@ -256,7 +261,7 @@ def test_turns_that_end_while_the_agent_is_busy_wait_their_turn(db_factory) -> N
 
     assert run(go()) is False
     assert call.link.of(CallerSaid) == [CallerSaid("First question"), CallerSaid("Second question")]
-    assert call.speaker.said == ["First answer.", "Done.", "Second answer."]
+    assert [s.text for s in call.link.of(AgentSentence)] == ["First answer.", "Done.", "Second answer."]
     assert call.session.state.turn == 2
 
 
@@ -564,3 +569,397 @@ def test_a_metrics_failure_never_breaks_the_call(db_factory, monkeypatch, caplog
     with caplog.at_level(logging.ERROR):
         assert run(go()) == "caller_hung_up"
     assert "Could not record a live turn metric" in caplog.text
+
+
+# --- 5.4: interruptions --------------------------------------------------------------
+
+from backend.app.agent.loop import NOTE_INTERRUPTED_EARLY, NOTE_START  # noqa: E402
+from backend.app.voice.live_call import (  # noqa: E402
+    REPLY_SILENCE,
+    REPLY_SLOW_DOWN,
+    REPLY_TIME_LIMIT,
+    SegmentEnd,
+    StopPlayback,
+)
+
+
+def caller_message(llm: FakeLLM, request: int = -1) -> str:
+    messages = llm.requests[request]["messages"]
+    return [m for m in messages if m["role"] == "user" and isinstance(m["content"], str)][-1]["content"]
+
+
+def payment_records(db_factory) -> int:
+    with db_factory() as db:
+        return len(list(db.scalars(select(models.ServicingRequestRecord).where(
+            models.ServicingRequestRecord.operation == "request_payment"))))
+
+
+def test_speaking_over_the_agent_stops_it_and_the_model_learns_what_was_heard(db_factory) -> None:
+    gated = GatedLLM("Your main account has 500 US dollars. ", "Is there anything else? Have a nice day.")
+    llm = FakeLLM([gated, say("Your savings account has 900 US dollars.")])
+    call = Call(db_factory, llm)
+
+    async def go():
+        call.start()
+        call.listener.say_turn("What's my balance?")
+        await call.link.wait_for(SegmentEnd)
+        call.link.play_everything()  # the caller heard the first sentence
+        await asyncio.sleep(0.02)
+        call.listener.hear("update", "No, the savings one")
+        await call.link.wait_for(StopPlayback)
+        gated.release.set()
+        await call.link.wait_for(ReplyDone)
+        call.listener.hear("end_of_turn", "No, the savings one", (0.95, 0.95, 0.95, 0.95))
+        await call.link.wait_for(ReplyDone, count=2)
+        await call.end()
+
+    run(go())
+
+    assert call.speaker.cleared == 1
+    assert call.link.of(StopPlayback) == [StopPlayback(0)]
+    # The rest of the interrupted reply was neither spoken nor shown.
+    assert [s.text for s in call.link.of(AgentSentence) if s.reply == 0] == ["Your main account has 500 US dollars."]
+    assert "Is there anything else?" not in call.speaker.said
+    assert caller_message(llm) == (
+        f'{NOTE_START}the caller interrupted your last reply and heard only: '
+        f'"Your main account has 500 US dollars."]\n\nNo, the savings one'
+    )
+
+
+def test_only_sentences_that_finished_playing_count_as_heard(db_factory) -> None:
+    # Both sentences reached the caller's app; only the first finished playing.
+    gated = GatedLLM("First part. Second part. ", "Third part.")
+    llm = FakeLLM([gated, say("Okay.")])
+    call = Call(db_factory, llm)
+
+    async def go():
+        call.start()
+        call.listener.say_turn("Go on")
+        first_end = await call.link.wait_for(SegmentEnd)
+        await call.link.wait_for(SegmentEnd, count=2)
+        call.link.report_played(first_end.reply, first_end.segment)
+        await asyncio.sleep(0.02)
+        call.listener.hear("update", "Stop please")
+        await call.link.wait_for(StopPlayback)
+        gated.release.set()
+        await call.link.wait_for(ReplyDone)
+        call.listener.hear("end_of_turn", "Stop please", (0.9, 0.9))
+        await call.link.wait_for(ReplyDone, count=2)
+        await call.end()
+
+    run(go())
+
+    heard_only_first = f'{NOTE_START}the caller interrupted your last reply and heard only: "First part."]'
+    assert caller_message(llm).startswith(heard_only_first)
+
+
+def test_interrupting_before_any_audio_means_nothing_was_heard(db_factory) -> None:
+    gated = GatedLLM("", "Here is a long answer.")
+    llm = FakeLLM([gated, say("Okay.")])
+    call = Call(db_factory, llm)
+
+    async def go():
+        call.start()
+        call.listener.say_turn("Tell me everything")
+        await asyncio.sleep(0.05)  # the agent is still thinking
+        call.listener.hear("update", "Actually never mind")
+        await asyncio.sleep(0.05)
+        gated.release.set()
+        await call.link.wait_for(ReplyDone)
+        call.listener.hear("end_of_turn", "Actually never mind", (0.9, 0.9, 0.9))
+        await call.link.wait_for(ReplyDone, count=2)
+        await call.end()
+
+    run(go())
+
+    assert call.link.of(StopPlayback) == []  # nothing was playing
+    assert "Here is a long answer." not in call.speaker.said
+    assert caller_message(llm).startswith(f"{NOTE_START}{NOTE_INTERRUPTED_EARLY}]")
+
+
+@pytest.mark.parametrize(
+    "noise",
+    [("speech_started", ""), ("update", "  "), ("update", "..."), ("update", "500 US dollars")],
+    ids=["speech-started-alone", "blank", "punctuation-only", "echo-of-the-agent"],
+)
+def test_noise_and_echo_dont_interrupt(db_factory, noise) -> None:
+    gated = GatedLLM("Your main account has 500 US dollars. ", "Anything else?")
+    call = Call(db_factory, FakeLLM([gated]))
+
+    async def go():
+        call.start()
+        call.listener.say_turn("What's my balance?")
+        await call.link.wait_for(SegmentEnd)
+        call.listener.hear(*noise)
+        await asyncio.sleep(0.05)
+        gated.release.set()
+        await call.link.wait_for(ReplyDone)
+        await call.end()
+
+    run(go())
+
+    assert call.link.of(StopPlayback) == []
+    assert call.speaker.said == ["Your main account has 500 US dollars.", "Anything else?"]
+
+
+def test_without_an_answer_to_the_stop_earlier_reports_decide_what_was_heard(db_factory, monkeypatch) -> None:
+    monkeypatch.setattr(live_call, "STOP_ANSWER_TIMEOUT_S", 0.1)
+    gated = GatedLLM("First part. ", "Second part.")
+    llm = FakeLLM([gated, say("Okay.")])
+    call = Call(db_factory, llm)
+    call.link.answer_stops = False
+
+    async def go():
+        call.start()
+        call.listener.say_turn("Go on")
+        await call.link.wait_for(SegmentEnd)
+        call.link.play_everything()
+        await asyncio.sleep(0.02)
+        call.listener.hear("update", "Stop please")
+        await call.link.wait_for(StopPlayback)
+        gated.release.set()
+        await call.link.wait_for(ReplyDone)
+        call.listener.hear("end_of_turn", "Stop please", (0.9, 0.9))
+        await call.link.wait_for(ReplyDone, count=2)
+        await call.end()
+
+    run(go())
+
+    assert '"First part."' in caller_message(llm)
+
+
+def test_the_apps_answer_to_a_stop_is_what_counts(db_factory) -> None:
+    # Nothing reported as played yet, but the answer says segment 0 finished.
+    gated = GatedLLM("First part. ", "Second part.")
+    llm = FakeLLM([gated, say("Okay.")])
+    call = Call(db_factory, llm)
+    call.link.answer_stops = False
+
+    async def go():
+        call.start()
+        call.listener.say_turn("Go on")
+        end = await call.link.wait_for(SegmentEnd)
+        call.listener.hear("update", "Stop please")
+        stop = await call.link.wait_for(StopPlayback)
+        call.link._incoming.put_nowait(live_call.PlaybackStopped(stop.reply, (end.segment,)))
+        gated.release.set()
+        await call.link.wait_for(ReplyDone)
+        call.listener.hear("end_of_turn", "Stop please", (0.9, 0.9))
+        await call.link.wait_for(ReplyDone, count=2)
+        await call.end()
+
+    run(go())
+
+    assert '"First part."' in caller_message(llm)
+
+
+def test_a_reply_heard_in_full_can_no_longer_be_interrupted(db_factory) -> None:
+    call = Call(db_factory, FakeLLM([say("All done."), say("Bye.")]))
+
+    async def go():
+        call.start()
+        call.listener.say_turn("Finish up")
+        await call.link.wait_for(ReplyDone)
+        call.link.play_everything()
+        await asyncio.sleep(0.02)
+        call.listener.say_turn("Thanks a lot")
+        await call.link.wait_for(ReplyDone, count=2)
+        await call.end()
+
+    run(go())
+
+    assert call.link.of(StopPlayback) == []
+
+
+# --- 5.4: the interrupted read-back ------------------------------------------------------
+
+PROPOSE = ("t1", "propose_payment", {"account_id": "acct_a_1", "amount": "120.00"})
+READ_BACK = "I've prepared 120.00 US dollars from your account. Shall I submit it?"
+
+
+def test_an_interrupted_read_back_cant_be_confirmed(db_factory) -> None:
+    llm = FakeLLM([
+        use(PROPOSE), say(READ_BACK),
+        use(("t2", "confirm_payment", {})), say("I'll read it back again."),
+    ])
+    call = Call(db_factory, llm)
+
+    async def go():
+        call.start()
+        call.listener.say_turn("Pay 120 from my account")
+        await call.link.wait_for(ReplyDone)  # sent, but the caller is still hearing it
+        call.listener.hear("update", "Yes yes go ahead")
+        await call.link.wait_for(StopPlayback)
+        call.listener.hear("end_of_turn", "Yes yes go ahead", (0.95, 0.95, 0.95, 0.95))
+        await call.link.wait_for(ReplyDone, count=2)
+        await call.end()
+
+    run(go())
+
+    assert payment_records(db_factory) == 0
+    assert call.session.state.pending_payment is None
+    tool_result = llm.requests[-1]["messages"][-1]["content"][0]["content"]
+    assert '"error": "readback_not_heard"' in tool_result
+
+
+def test_a_read_back_interrupted_while_the_agent_was_still_working_cant_be_confirmed(db_factory) -> None:
+    gated = GatedLLM("", READ_BACK)
+    llm = FakeLLM([use(PROPOSE), gated, use(("t2", "confirm_payment", {})), say("Let me read it again.")])
+    call = Call(db_factory, llm)
+
+    async def go():
+        call.start()
+        call.listener.say_turn("Pay 120 from my account")
+        await asyncio.sleep(0.05)  # proposed, read-back not yet written
+        call.listener.hear("update", "Sure sure")
+        await asyncio.sleep(0.05)
+        gated.release.set()
+        await call.link.wait_for(ReplyDone)
+        call.listener.hear("end_of_turn", "Sure sure", (0.95, 0.95))
+        await call.link.wait_for(ReplyDone, count=2)
+        await call.end()
+
+    run(go())
+
+    assert payment_records(db_factory) == 0
+
+
+def test_a_read_back_heard_in_full_can_be_confirmed(db_factory) -> None:
+    llm = FakeLLM([use(PROPOSE), say(READ_BACK), use(("t2", "confirm_payment", {})), say("Recorded.")])
+    call = Call(db_factory, llm)
+
+    async def go():
+        call.start()
+        call.listener.say_turn("Pay 120 from my account")
+        await call.link.wait_for(ReplyDone)
+        call.link.play_everything()
+        await asyncio.sleep(0.02)
+        call.listener.say_turn("Yes go ahead")
+        await call.link.wait_for(ReplyDone, count=2)
+        await call.end()
+
+    run(go())
+
+    assert payment_records(db_factory) == 1
+
+
+def test_a_read_back_shown_as_text_counts_as_heard(db_factory) -> None:
+    llm = FakeLLM([use(PROPOSE), say(READ_BACK), use(("t2", "confirm_payment", {})), say("Recorded.")])
+    call = Call(db_factory, llm, tts=FakeLiveTTS(fail_to_open=True))
+
+    async def go():
+        call.start()
+        call.listener.say_turn("Pay 120 from my account")
+        await call.link.wait_for(ReplyDone)
+        call.listener.say_turn("Yes go ahead")
+        await call.link.wait_for(ReplyDone, count=2)
+        await call.end()
+
+    run(go())
+
+    assert payment_records(db_factory) == 1
+
+
+def test_interrupting_a_later_reply_leaves_an_earlier_heard_read_back_alone(db_factory) -> None:
+    llm = FakeLLM([
+        use(PROPOSE), say(READ_BACK),
+        say("It's from your US dollar account. Shall I submit it?"),
+        use(("t2", "confirm_payment", {})), say("Recorded."),
+    ])
+    call = Call(db_factory, llm)
+
+    async def go():
+        call.start()
+        call.listener.say_turn("Pay 120 from my account")
+        await call.link.wait_for(ReplyDone)
+        call.link.play_everything()
+        await asyncio.sleep(0.02)
+        call.listener.say_turn("Which account")
+        await call.link.wait_for(ReplyDone, count=2)
+        call.listener.hear("update", "Yes yes")  # over the second reply
+        await call.link.wait_for(StopPlayback)
+        call.listener.hear("end_of_turn", "Yes yes", (0.95, 0.95))
+        await call.link.wait_for(ReplyDone, count=3)
+        await call.end()
+
+    run(go())
+
+    assert payment_records(db_factory) == 1
+
+
+# --- 5.4: call limits ---------------------------------------------------------------------
+
+
+class ManualClock:
+    def __init__(self) -> None:
+        self.now = 0.0
+
+    def __call__(self) -> float:
+        return self.now
+
+
+def test_a_call_ends_at_the_time_limit(db_factory, monkeypatch) -> None:
+    monkeypatch.setattr(live_call, "WATCHDOG_TICK_S", 0.01)
+    clock = ManualClock()
+    call = Call(db_factory, FakeLLM([]), clock=clock)
+
+    async def go():
+        call.start()
+        await asyncio.sleep(0.03)
+        clock.now = 15 * 60 - 1
+        call.listener.hear("update", "still talking")  # not silent
+        await asyncio.sleep(0.03)
+        assert not call.task.done()
+        clock.now = 15 * 60
+        return await call.task
+
+    assert run(go()) == "time_limit"
+    assert call.speaker.said == [REPLY_TIME_LIMIT]
+
+
+def test_a_call_ends_after_two_minutes_without_the_callers_words(db_factory, monkeypatch) -> None:
+    monkeypatch.setattr(live_call, "WATCHDOG_TICK_S", 0.01)
+    clock = ManualClock()
+    call = Call(db_factory, FakeLLM([]), clock=clock)
+
+    async def go():
+        call.start()
+        await asyncio.sleep(0.03)
+        clock.now = 100
+        call.listener.hear("update", "hmm let me think")
+        await asyncio.sleep(0.03)
+        clock.now = 219  # 119 s since the caller's words
+        await asyncio.sleep(0.03)
+        assert not call.task.done()
+        clock.now = 220
+        return await call.task
+
+    assert run(go()) == "silence"
+    assert call.speaker.said == [REPLY_SILENCE]
+
+
+def test_the_shipped_call_limits() -> None:
+    assert (config.LIVE_MAX_CALL_MINUTES, config.LIVE_SILENCE_MINUTES) == (15, 2)
+
+
+def test_turns_count_against_the_customers_shared_rate_limit(db_factory) -> None:
+    from backend.app.api.rate_limits import SlidingWindowLimiter
+
+    limiter = SlidingWindowLimiter(10)
+    for _ in range(10):
+        limiter.hit("cust_a")  # e.g. ten typed turns this minute
+    llm = FakeLLM([])
+    call = Call(db_factory, llm, turn_limiter=limiter)
+
+    async def go():
+        call.start()
+        call.listener.say_turn("What's my balance?")
+        await call.link.wait_for(ReplyDone)
+        await call.end()
+
+    run(go())
+
+    assert llm.requests == []
+    assert call.speaker.said == [REPLY_SLOW_DOWN]
+    assert call.session.unheard_by_model == [REPLY_SLOW_DOWN]
+    assert call.session.state.turn == 0

@@ -60,3 +60,7 @@ EOT_TIMEOUT_MS = int(os.environ.get("COLLECTWISE_EOT_TIMEOUT_MS", "5000"))
 # Provisional: D69's 0.6 was measured on nova-3's per-utterance confidence,
 # not Flux's per-word scores; re-measure with a real voice (5.7).
 LIVE_MIN_CONFIDENCE = float(os.environ.get("COLLECTWISE_LIVE_MIN_CONFIDENCE", "0.6"))
+# Live calls end after this long, or after this long without the caller's
+# words (D82): streaming speech-to-text bills by the minute, silences included.
+LIVE_MAX_CALL_MINUTES = float(os.environ.get("COLLECTWISE_LIVE_MAX_CALL_MINUTES", "15"))
+LIVE_SILENCE_MINUTES = float(os.environ.get("COLLECTWISE_LIVE_SILENCE_MINUTES", "2"))

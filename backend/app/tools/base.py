@@ -31,6 +31,10 @@ class PendingPayment:
     # When it was proposed, on the monotonic clock (D73).
     proposed_at: float
     submitted: bool = False
+    # False when the caller interrupted the reply that read it back, so they
+    # may not have heard it (live calls, D82). Typed and M4 voice turns
+    # never change it.
+    readback_heard: bool = True
 
 
 @dataclass(frozen=True)

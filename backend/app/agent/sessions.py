@@ -15,6 +15,8 @@ logger = logging.getLogger(__name__)
 # Automatic replies kept for the model's next turn (D74). Misheard voice turns
 # don't count towards the turn limit, so the list needs a cap of its own.
 MAX_UNHEARD_REPLIES = 3
+# How much of an interrupted reply the note repeats (D82).
+MAX_HEARD_CHARS = 300
 
 
 class SessionStoreFullError(Exception):
@@ -37,6 +39,9 @@ class ConversationSession:
     # again", "try again"), oldest first (D74). Only our own texts, never
     # the caller's words.
     unheard_by_model: list[str] = field(default_factory=list)
+    # Set when the caller interrupted the agent (live calls, D82): the part of
+    # its reply they heard ("" for none of it). Only the agent's own words.
+    heard_before_interruption: str | None = None
 
     @property
     def session_id(self) -> str:
@@ -46,6 +51,13 @@ class ConversationSession:
         """Keep a fixed reply for the model's next turn. Call with `lock` held."""
         self.unheard_by_model.append(reply)
         del self.unheard_by_model[:-MAX_UNHEARD_REPLIES]
+
+    def note_interrupted(self, heard: str) -> None:
+        """Tell the model on its next turn how much of its reply the caller
+        heard before interrupting. Call with `lock` held."""
+        if len(heard) > MAX_HEARD_CHARS:
+            heard = heard[: MAX_HEARD_CHARS - 3].rstrip() + "..."
+        self.heard_before_interruption = heard
 
 
 class SessionStore:

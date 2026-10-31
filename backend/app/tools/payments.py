@@ -122,6 +122,16 @@ def confirm_payment(ctx: ToolContext, args: ConfirmPaymentArgs) -> ToolResult:
     if not pending.submitted and ctx.state.turn <= pending.proposed_turn:
         return ToolResult.failure("confirmation_required")
 
+    # ...having heard it in full: an interrupted read-back is read again (D82).
+    if not pending.submitted and not pending.readback_heard:
+        ctx.state.pending_payment = None
+        return ToolResult.failure(
+            "readback_not_heard",
+            account_id=pending.account_id,
+            amount=str(pending.amount),
+            currency=pending.currency,
+        )
+
     # ...and recently, so a late "yes" about something else can't submit a
     # proposal the caller has forgotten (D73). Submitted ones only replay.
     if not pending.submitted and (

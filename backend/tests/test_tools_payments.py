@@ -390,3 +390,31 @@ def test_the_model_is_told_what_to_do_with_an_expired_payment() -> None:
 
     assert "payment_expired" in description
     assert "propose it again" in description
+
+
+# --- an interrupted read-back (D82) ---------------------------------------------
+
+
+def test_a_proposal_whose_read_back_wasnt_heard_cant_be_confirmed(ctx, clock) -> None:
+    from dataclasses import replace
+
+    propose(ctx, "120.00")
+    ctx.state.pending_payment = replace(ctx.state.pending_payment, readback_heard=False)
+    later_turns(ctx, 1)
+
+    assert confirm(ctx) == ToolResult.failure(
+        "readback_not_heard", account_id="acct_a_1", amount="120.00", currency="USD"
+    )
+    assert payment_records(ctx.db) == []
+    assert ctx.db.scalars(select(models.ServicingAuditEvent)).all() == []
+    assert ctx.state.pending_payment is None
+
+
+def test_a_new_proposal_is_heard_by_default(ctx, clock) -> None:
+    propose(ctx, "120.00")
+
+    assert ctx.state.pending_payment.readback_heard is True
+
+
+def test_the_model_is_told_what_to_do_with_an_unheard_read_back() -> None:
+    assert "readback_not_heard" in TOOLS["confirm_payment"].description

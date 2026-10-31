@@ -460,3 +460,50 @@ def test_fixed_replies_are_not_streamed(session, db_session, first_response, fix
 
     assert result.reply == fixed_reply
     assert pieces == []
+
+
+# --- what the caller heard of an interrupted reply (D82) ---------------------------
+
+from backend.app.agent.loop import NOTE_INTERRUPTED_EARLY, NOTE_START, NOTE_UNHEARD  # noqa: E402
+from backend.app.agent.sessions import MAX_HEARD_CHARS  # noqa: E402
+
+
+def test_the_model_is_told_how_much_of_an_interrupted_reply_was_heard(session, db_session) -> None:
+    llm = FakeLLM([say("ok"), say("ok")])
+    session.note_interrupted("Your balance is 500 US dollars.")
+
+    turn(session, db_session, llm, "the other account")
+    turn(session, db_session, llm, "thanks")
+
+    assert last_caller_message_of(llm, 0) == (
+        f'{NOTE_START}the caller interrupted your last reply and heard only: '
+        f'"Your balance is 500 US dollars."]\n\nthe other account'
+    )
+    assert last_caller_message_of(llm, 1) == "thanks"
+
+
+def test_an_interruption_and_fixed_replies_share_one_note(session, db_session) -> None:
+    llm = FakeLLM([say("ok")])
+    session.note_interrupted("")
+    session.note_unheard("Sorry, could you say that again?")
+
+    turn(session, db_session, llm, "pay fifty")
+
+    assert last_caller_message_of(llm, 0) == (
+        f'{NOTE_START}{NOTE_INTERRUPTED_EARLY}; {NOTE_UNHEARD}"Sorry, could you say that again?"]\n\npay fifty'
+    )
+
+
+def test_a_long_heard_part_is_shortened(session) -> None:
+    session.note_interrupted("word " * 200)
+
+    assert len(session.heard_before_interruption) == MAX_HEARD_CHARS
+    assert session.heard_before_interruption.endswith("...")
+
+
+def test_the_system_prompt_covers_interruptions() -> None:
+    assert "interrupted" in SYSTEM_PROMPT
+
+
+def last_caller_message_of(llm: FakeLLM, request: int) -> str:
+    return [m for m in llm.requests[request]["messages"] if m["role"] == "user"][-1]["content"]

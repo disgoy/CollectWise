@@ -5,6 +5,7 @@ import asyncio
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 
+from backend.app.voice.live_call import PlaybackStopped, SegmentEnd, SegmentPlayed, StopPlayback
 from backend.app.voice.live_speech import HeardEvent, SegmentDone, SpokenAudio
 from backend.app.voice.speech import SpeechUnavailableError
 
@@ -76,6 +77,7 @@ class FakeSpeaker:
         self.hold_until_end_reply = hold_until_end_reply
         self.fail_on_say: int | None = None  # the said-count at which say() fails
         self.too_long: set[str] = set()
+        self.cleared = 0
         self._held: list[int] = []
         self._output: asyncio.Queue = asyncio.Queue()
         self._segments = 0
@@ -107,6 +109,7 @@ class FakeSpeaker:
             self._deliver(held)
 
     async def clear(self) -> None:
+        self.cleared += 1
         self._held = []
 
     def break_down(self) -> None:
@@ -141,30 +144,46 @@ class FakeLiveTTS:
 
 
 class FakeLink:
-    """The caller's app: audio frames in until hang_up(), events recorded."""
+    """The caller's app: audio frames and playback reports in until
+    hang_up(), events recorded. By default it answers a StopPlayback with the
+    segments reported as played so far."""
 
     def __init__(self) -> None:
         self.events: list = []
-        self._frames: asyncio.Queue = asyncio.Queue()
+        self.answer_stops = True
+        self.played: dict[int, list[int]] = {}
+        self._incoming: asyncio.Queue = asyncio.Queue()
         self._arrived = asyncio.Condition()
 
     def send_frame(self, chunk: bytes) -> None:
-        self._frames.put_nowait(chunk)
+        self._incoming.put_nowait(chunk)
+
+    def report_played(self, reply: int, segment: int) -> None:
+        self.played.setdefault(reply, []).append(segment)
+        self._incoming.put_nowait(SegmentPlayed(reply, segment))
+
+    def play_everything(self) -> None:
+        """Report every segment sent so far as played."""
+        for end in self.of(SegmentEnd):
+            if end.segment not in self.played.get(end.reply, []):
+                self.report_played(end.reply, end.segment)
 
     def hang_up(self) -> None:
-        self._frames.put_nowait(_END)
+        self._incoming.put_nowait(_END)
 
-    async def audio_in(self):
+    async def incoming(self):
         while True:
-            chunk = await self._frames.get()
-            if chunk is _END:
+            item = await self._incoming.get()
+            if item is _END:
                 return
-            yield chunk
+            yield item
 
     async def send(self, event) -> None:
         async with self._arrived:
             self.events.append(event)
             self._arrived.notify_all()
+        if isinstance(event, StopPlayback) and self.answer_stops:
+            self._incoming.put_nowait(PlaybackStopped(event.reply, tuple(self.played.get(event.reply, []))))
 
     async def wait_for(self, kind: type, count: int = 1):
         """Wait until `count` events of this type have arrived; return the last."""

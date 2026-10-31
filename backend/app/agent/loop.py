@@ -39,20 +39,29 @@ REPLY_TURN_LIMIT = (
 # Fixed replies the model should hear about on the next turn (D74). The rest
 # end the conversation, so the model never speaks again.
 UNHEARD_OUTCOMES = {"unavailable", "empty", "cannot_help"}
-NOTE_PREFIX = (
-    "[Note from CollectWise, not the caller: since your last reply the caller "
-    "was sent these automatic messages: "
-)
+NOTE_START = "[Note from CollectWise, not the caller: "
+NOTE_UNHEARD = "since your last reply the caller was sent these automatic messages: "
+NOTE_PREFIX = NOTE_START + NOTE_UNHEARD
+NOTE_INTERRUPTED = 'the caller interrupted your last reply and heard only: "{heard}"'
+NOTE_INTERRUPTED_EARLY = "the caller interrupted your last reply before hearing any of it"
 
 
 def _with_note(session: ConversationSession, text: str) -> str:
-    """Prefix the caller's words with the fixed replies the model missed, and
-    clear them. One string, so history stays append-only and roles alternate."""
-    if not session.unheard_by_model:
+    """Prefix the caller's words with what they heard that the model doesn't
+    know about (fixed replies, D74; how much of an interrupted reply, D82),
+    and clear it. One string, so history stays append-only and roles
+    alternate."""
+    heard = session.heard_before_interruption
+    if heard is None and not session.unheard_by_model:
         return text
-    replies = "; ".join(f'"{reply}"' for reply in session.unheard_by_model)
+    parts = []
+    if heard is not None:
+        parts.append(NOTE_INTERRUPTED.format(heard=heard) if heard else NOTE_INTERRUPTED_EARLY)
+    if session.unheard_by_model:
+        parts.append(NOTE_UNHEARD + "; ".join(f'"{reply}"' for reply in session.unheard_by_model))
+    session.heard_before_interruption = None
     session.unheard_by_model.clear()
-    return f"{NOTE_PREFIX}{replies}]\n\n{text}"
+    return f"{NOTE_START}{'; '.join(parts)}]\n\n{text}"
 
 
 @dataclass(frozen=True)
