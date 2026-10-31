@@ -5,6 +5,14 @@
 // scheduled and returns { stop(), onEnded(callback) }; `send(message)` goes to
 // the server. Both are injected, so this runs without a browser in tests.
 
+// Whether to let queued audio finish when the call closes. On a normal end
+// (a handoff, a time limit) the server has sent the last reply faster than it
+// plays, so closing at once would cut it off; when the caller hung up, or the
+// call broke, silence is right.
+export function playOutAtEnd(closeCode, endReason) {
+  return closeCode === 1000 && endReason !== "caller_hung_up";
+}
+
 export class PlaybackTracker {
   constructor({ schedule, send, reset = () => {} }) {
     this.schedule = schedule;
@@ -12,6 +20,7 @@ export class PlaybackTracker {
     this.reset = reset;
     this.segments = new Map(); // "reply:segment" -> state
     this.playing = new Set(); // chunks scheduled and not yet ended or stopped
+    this.quietWaiters = [];
   }
 
   segment(reply, segment) {
@@ -34,6 +43,7 @@ export class PlaybackTracker {
       this.playing.delete(chunk);
       state.waiting -= 1;
       this.reportIfPlayed(state);
+      this.notifyIfQuiet();
     });
   }
 
@@ -53,6 +63,19 @@ export class PlaybackTracker {
 
   get isPlaying() {
     return this.playing.size > 0;
+  }
+
+  // Calls `done` once nothing is left playing: at once if nothing is.
+  whenQuiet(done) {
+    this.quietWaiters.push(done);
+    this.notifyIfQuiet();
+  }
+
+  notifyIfQuiet() {
+    if (this.playing.size > 0) return;
+    const waiters = this.quietWaiters;
+    this.quietWaiters = [];
+    waiters.forEach((done) => done());
   }
 
   // The caller interrupted: silence everything now and say which of this

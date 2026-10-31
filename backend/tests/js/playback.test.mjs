@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { PlaybackTracker } from "../../app/static/live/playback.mjs";
+import { PlaybackTracker, playOutAtEnd } from "../../app/static/live/playback.mjs";
 
 // A scheduler whose chunks end when the test says so; stopping a chunk fires
 // its "ended" callbacks, as Web Audio does.
@@ -114,4 +114,44 @@ test("a gap between chunks of one segment isn't mistaken for the end of it", () 
   assert.deepEqual(sent, []);
   chunks[1].end();
   assert.deepEqual(sent, [{ type: "segment_played", reply: 0, segment: 0 }]);
+});
+
+// --- the end of a call -------------------------------------------------------
+
+test("the last reply keeps playing after the call closes, until its final chunk ends", () => {
+  const { tracker, chunks } = fakeAudio();
+  tracker.audio(5, 0, SAMPLES, 24000);
+  tracker.audio(5, 0, SAMPLES, 24000);
+  let quiet = 0;
+  tracker.whenQuiet(() => quiet++);
+  chunks[0].end();
+  assert.equal(quiet, 0); // one chunk still to play
+  chunks[1].end();
+  assert.equal(quiet, 1);
+  chunks[1].end(); // a late "ended" calls nobody twice
+  assert.equal(quiet, 1);
+});
+
+test("with nothing playing, waiting for quiet ends at once", () => {
+  const { tracker } = fakeAudio();
+  let quiet = 0;
+  tracker.whenQuiet(() => quiet++);
+  assert.equal(quiet, 1);
+});
+
+test("a stop while waiting for quiet ends the wait", () => {
+  const { tracker } = fakeAudio();
+  tracker.audio(6, 0, SAMPLES, 24000);
+  let quiet = 0;
+  tracker.whenQuiet(() => quiet++);
+  tracker.stop(6);
+  assert.equal(quiet, 1);
+});
+
+test("only a normal end that the caller didn't cause lets the audio finish", () => {
+  assert.equal(playOutAtEnd(1000, "handed_off"), true);
+  assert.equal(playOutAtEnd(1000, "time_limit"), true);
+  assert.equal(playOutAtEnd(1000, "caller_hung_up"), false);
+  assert.equal(playOutAtEnd(4401, null), false); // the call broke
+  assert.equal(playOutAtEnd(1006, "handed_off"), false);
 });

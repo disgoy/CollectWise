@@ -3,7 +3,7 @@
 // page's memory.
 
 import { CALLER_RATE, Framer, Resampler, floatToPcm16, parseAudioFrame } from "./audio.mjs";
-import { PlaybackTracker } from "./playback.mjs";
+import { PlaybackTracker, playOutAtEnd } from "./playback.mjs";
 import { CallTimeline, formatClock, formatDuration } from "./timeline.mjs";
 
 const CLOSE_MESSAGES = {
@@ -29,6 +29,9 @@ const MICROPHONE_ERRORS = {
   NotFoundError: "No microphone was found.",
   NotReadableError: "The microphone is in use by another app.",
 };
+
+// The longest the last reply may keep playing after the call has closed.
+const PLAY_OUT_LIMIT_MS = 20000;
 
 const $ = (id) => document.getElementById(id);
 
@@ -238,6 +241,7 @@ function openCall(sessionId, context, microphone) {
   let clockTimer = null;
   let outputRate = 24000;
   let ready = false;
+  let endReason = null;
 
   // Microphone -> 16 kHz -> 80 ms frames -> server.
   const source = context.createMediaStreamSource(microphone);
@@ -300,6 +304,7 @@ function openCall(sessionId, context, microphone) {
         if (!playback.isPlaying) setStatus("Listening.");
         break;
       case "call_ended":
+        endReason = message.reason;
         setStatus(END_REASONS[message.reason] || "Call ended.");
         break;
       default:
@@ -314,7 +319,19 @@ function openCall(sessionId, context, microphone) {
     $("clock").textContent = formatDuration(timeline.elapsed());
     $("copy").disabled = false;
     microphone.getTracks().forEach((track) => track.stop());
-    context.close();
+    // Let the last reply finish ("I'm connecting you to a member of our team
+    // now") instead of cutting it off, unless the caller hung up.
+    let closed = false;
+    const closeAudio = () => {
+      if (!closed) context.close();
+      closed = true;
+    };
+    if (playOutAtEnd(event.code, endReason)) {
+      setTimeout(closeAudio, PLAY_OUT_LIMIT_MS);
+      playback.whenQuiet(closeAudio);
+    } else {
+      closeAudio();
+    }
     $("hang-up").disabled = true;
     $("start").disabled = token === null;
     if (event.code !== 1000) setStatus(CLOSE_MESSAGES[event.code] || `The call was cut off (${event.code}).`, { error: true });

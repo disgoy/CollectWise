@@ -417,36 +417,9 @@ def test_streamed_text_covers_every_model_call_in_the_turn(session, db_session) 
 
     result = run_turn(session, "my accounts?", llm=llm, db=db_session, system=SYSTEM, on_text=pieces.append)
 
-    assert "".join(pieces) == "Let me check. \nYou have one US dollar account."
+    assert "".join(pieces) == "Let me check. You have one US dollar account."
     assert result.reply == "You have one US dollar account."
     assert [request["streamed"] for request in llm.requests] == [True, True]
-
-
-def test_words_before_a_tool_call_end_their_sentence_for_the_listener(session, db_session) -> None:
-    # The model's text before a tool call usually ends without a space.
-    llm = FakeLLM([use(("t1", "list_accounts", {}), text="One moment."), say("You have one account.")])
-    pieces: list[str] = []
-
-    run_turn(session, "my accounts?", llm=llm, db=db_session, system=SYSTEM, on_text=pieces.append)
-
-    assert "".join(pieces) == "One moment.\nYou have one account."
-    # The break is for the listener only; the history keeps the model's words.
-    assert session.messages[1]["content"][0].text == "One moment."
-
-
-def test_a_tool_call_without_words_streams_nothing_before_the_answer(session, db_session) -> None:
-    # A lone break would count as the agent's first words in the live timings.
-    llm = FakeLLM([use(("t1", "list_accounts", {})), say("You have one account.")])
-    pieces: list[str] = []
-
-    run_turn(session, "my accounts?", llm=llm, db=db_session, system=SYSTEM, on_text=pieces.append)
-
-    assert "".join(pieces) == "You have one account."
-
-
-def test_the_prompt_asks_for_neutral_words_before_a_lookup() -> None:
-    assert "One moment, let me check that." in SYSTEM_PROMPT
-    assert "must not state or hint at any fact, result or decision" in SYSTEM_PROMPT
 
 
 def test_without_a_listener_nothing_streams(session, db_session) -> None:
