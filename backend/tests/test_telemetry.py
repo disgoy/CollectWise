@@ -303,3 +303,92 @@ def test_the_report_gives_each_stage_p50_and_p95() -> None:
     assert "model calls per turn                   median 1, max 2  (n=3)" in report
     assert "1 model call(s) failed (unavailable)" in report
     assert "p90" not in report
+
+
+# --- spans that need their own situation ---------------------------------------------------
+
+
+def test_an_interruption_mid_turn_is_marked_on_the_live_turn(spans, db_factory) -> None:
+    from backend.app.voice.live_call import AgentSentence, StopPlayback
+    from backend.tests.test_live_call import GatedLLM
+
+    gated = GatedLLM("Let me look at that for you. ", "Your balance is 500 US dollars.")
+    call = Call(db_factory, gated)
+
+    async def go():
+        call.start()
+        call.listener.say_turn("What's my balance?")
+        await call.link.wait_for(AgentSentence)  # the agent is still writing
+        call.listener.hear("update", "No, the other account")
+        await call.link.wait_for(StopPlayback)
+        gated.release.set()
+        await call.link.wait_for(ReplyDone)
+        await call.end()
+
+    run(go())
+
+    [live] = named(spans, "live.turn")
+    assert "interrupted" in [e.name for e in live.events]
+
+
+def test_a_rate_limited_live_turn_says_so(spans, db_factory) -> None:
+    from backend.app.api.rate_limits import SlidingWindowLimiter
+
+    limiter = SlidingWindowLimiter(1)
+    limiter.hit("cust_a")
+    call = Call(db_factory, FakeLLM([]), turn_limiter=limiter)
+
+    async def go():
+        call.start()
+        call.listener.say_turn("What's my balance?")
+        await call.link.wait_for(ReplyDone)
+        await call.end()
+
+    run(go())
+
+    [live] = named(spans, "live.turn")
+    assert attrs(live)["outcome"] == "rate_limited"
+    assert named(spans, "agent.turn") == []
+
+
+def test_a_turn_based_voice_turn_has_listen_and_speak_spans(spans, session, db_session) -> None:
+    from backend.app.voice.speech import SpeechUnavailableError
+    from backend.app.voice.turn import run_voice_turn
+    from backend.tests.fake_speech import FakeSTT, FakeTTS
+    from backend.tests.test_voice_turn import CLIP
+
+    run_voice_turn(session, CLIP, stt=FakeSTT([SpeechUnavailableError("down")]),
+                   tts=FakeTTS(failures=[SpeechUnavailableError("down")]), llm=FakeLLM([]), db=db_session,
+                   system=SYSTEM)
+
+    [listen] = named(spans, "voice.listen")
+    [speak] = named(spans, "voice.speak")
+    assert listen.status.status_code == speak.status.status_code == StatusCode.ERROR
+    assert attrs(listen) == {"session_id": session.session_id, "ok": False}
+    assert attrs(speak) == {"session_id": session.session_id, "ok": False, "outcome": "stt_unavailable"}
+
+
+def test_the_report_uses_p95_not_p90() -> None:
+    from backend.tests.test_live_report import metric
+
+    report = summarize([metric(n, audio=n) for n in range(1, 21)])
+
+    assert "to the first audio  <- the headline    median     10 ms, p95     19 ms" in report  # p90 would be 18
+
+
+def test_the_report_reads_only_the_model_and_tool_calls_of_its_turns(db_session) -> None:
+    from backend.app.db import models
+    from backend.tests.test_live_report import metric
+    from scripts.live_report import load_events
+
+    def event(turn, event_type, session="sess_aaaaaaaa11112222"):
+        return models.ConversationEventRecord(session_id=session, customer_id="cust_demo", turn=turn,
+                                              event_type=event_type, outcome="ok", latency_ms=5)
+
+    db_session.add_all([event(1, "tool_call"), event(1, "turn_started"), event(2, "model_call"),
+                        event(1, "model_call", session="sess_other")])
+    db_session.commit()
+
+    loaded = load_events(db_session, [metric(1)])
+
+    assert [(e.session_id, e.turn, e.event_type) for e in loaded] == [("sess_aaaaaaaa11112222", 1, "tool_call")]
