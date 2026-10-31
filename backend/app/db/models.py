@@ -210,7 +210,7 @@ class ConversationEventRecord(Base):
     __table_args__ = (
         CheckConstraint(
             "event_type IN ('session_started', 'turn_started', "
-            "'model_call', 'tool_call', 'turn_completed')",
+            "'model_call', 'tool_call', 'turn_completed', 'payment_cancelled')",
             name="ck_conversation_events_type",
         ),
         CheckConstraint(

@@ -64,6 +64,10 @@ def _with_note(session: ConversationSession, text: str) -> str:
     return f"{NOTE_START}{'; '.join(parts)}]\n\n{text}"
 
 
+class SessionBusyError(Exception):
+    """The conversation's previous turn was still running after the wait."""
+
+
 @dataclass(frozen=True)
 class ToolCallRecord:
     name: str
@@ -118,6 +122,7 @@ def run_turn(
     db: Session,
     system: str,
     on_text: Callable[[str], None] | None = None,
+    lock_timeout: float | None = None,
 ) -> TurnResult:
     """Run one caller turn: model calls and tool calls until a reply.
 
@@ -125,8 +130,14 @@ def run_turn(
     "let me check" before a tool call) is passed on as it is generated (M5).
     Fixed replies are never streamed: the caller speaks `TurnResult.reply`
     when nothing was. The result is the same either way.
+
+    Turns in one conversation run one at a time. With `lock_timeout`, a turn
+    that can't start within that many seconds raises SessionBusyError instead
+    of waiting for the previous one (M6.1); it is not counted.
     """
-    with session.lock:
+    if not session.lock.acquire(timeout=-1 if lock_timeout is None else lock_timeout):
+        raise SessionBusyError()
+    try:
         state = session.state
         turn_started = time.perf_counter()
         events: list[ConversationEvent] = []
@@ -149,6 +160,8 @@ def run_turn(
             # Written after the turn in a separate commit, so servicing
             # transactions and tool rollbacks never touch them (D48).
             record_conversation_events(db, events)
+    finally:
+        session.lock.release()
 
 
 def _run_turn(
@@ -169,6 +182,13 @@ def _run_turn(
         record("turn_completed", outcome=outcome, latency_ms=_elapsed_ms(turn_started))
         if outcome in UNHEARD_OUTCOMES:
             session.note_unheard(reply)
+            # A payment proposed in this turn was never read back: the caller
+            # heard only this fixed reply, so a later "yes" mustn't submit it.
+            # (It can't be submitted yet: confirming needs a later turn.)
+            pending = state.pending_payment
+            if pending is not None and pending.proposed_turn == state.turn:
+                state.pending_payment = None
+                record("payment_cancelled", outcome="not_read_back")
         return TurnResult(
             reply=reply,
             handed_off=state.handoff is not None,

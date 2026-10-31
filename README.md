@@ -89,6 +89,9 @@ refuses paid runs until a person approves the harness with `--approve-harness`.
 | `COLLECTWISE_AGENT_LLM` | unset (agent off) | Set to `anthropic` to enable real, paid model calls |
 | `COLLECTWISE_AGENT_MODEL` | `claude-sonnet-5-5` | Model used by the agent |
 | `COLLECTWISE_AGENT_EFFORT` | `medium` | Model effort level |
+| `COLLECTWISE_AGENT_TIMEOUT_S` | `15` | Longest wait for the next piece of a model reply before the caller hears "having trouble" |
+| `COLLECTWISE_AGENT_MAX_RETRIES` | `1` | Retries of a failed model call |
+| `COLLECTWISE_TURN_LOCK_WAIT_S` | `5` | A typed message waits this long for the previous turn, then gets 409 |
 | `ANTHROPIC_API_KEY` | none | Anthropic credentials |
 | `COLLECTWISE_SPEECH` | unset (voice off) | Set to `deepgram` to enable real, paid speech-to-text and text-to-speech |
 | `COLLECTWISE_STT_MODEL` | `nova-3` | Deepgram speech-to-text model |
@@ -156,6 +159,9 @@ Open http://127.0.0.1:8000/live, sign in as the demo customer, press Start call
 and allow the microphone. Headphones work best. The page is plain HTML and
 JavaScript served by the app with a strict Content-Security-Policy; its logic
 is tested with `node --test backend/tests/js/` (also run by pytest).
+
+What happens when each part fails (the model, listening, speaking, the database, the caller's
+connection): [docs/FAILURE_MODES.md](docs/FAILURE_MODES.md), each row proven by a test.
 
 To measure a call: [docs/LIVE_CALL_CHECKLIST.md](docs/LIVE_CALL_CHECKLIST.md) (what to try), then
 `python -m scripts.live_report --minutes 30` (speed and hearing, numbers only) and

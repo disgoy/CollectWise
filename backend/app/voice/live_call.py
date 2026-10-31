@@ -27,6 +27,7 @@ from backend.app import config
 from backend.app.agent.llm import LLMClient
 from backend.app.agent.loop import REPLY_HANDED_OFF, TurnResult, run_turn
 from backend.app.agent.sessions import ConversationSession
+from backend.app.services.conversation_events import ConversationEvent, record_conversation_events
 from backend.app.services.voice_metrics import LiveTurnMetric, record_live_turn_metric
 from backend.app.voice.guard import check_transcript
 from backend.app.voice.live_speech import (
@@ -585,6 +586,30 @@ class _LiveCall:
         with self._session.lock:
             note(text)
 
+    async def cancel_unconfirmed_payment(self) -> None:
+        """At the end of a call, a payment that was read back but not
+        confirmed is cancelled (M6.1): it can only be confirmed on the call
+        where it was read back. Runs after the last turn has finished."""
+        session = self._session
+
+        def cancel() -> None:
+            with session.lock:
+                pending = session.state.pending_payment
+                if pending is None or pending.submitted:
+                    return
+                session.state.pending_payment = None
+                turn = session.state.turn
+            db = self._db_factory()
+            try:
+                record_conversation_events(db, [ConversationEvent(
+                    session_id=session.session_id, customer_id=session.caller.customer_id, turn=turn,
+                    event_type="payment_cancelled", outcome="call_ended",
+                )])
+            finally:
+                db.close()
+
+        await asyncio.to_thread(cancel)
+
     async def _record(self, metric: LiveTurnMetric) -> None:
         def save() -> None:
             db = self._db_factory()
@@ -638,5 +663,6 @@ async def run_live_call(
                 reason = await call.take_turns()
                 for helper in helpers:
                     helper.cancel()
+    await call.cancel_unconfirmed_payment()
     await link.send(CallEnded(reason))
     return reason

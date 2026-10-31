@@ -259,6 +259,8 @@ function openCall(sessionId, context, microphone) {
   socket.onopen = () => socket.send(JSON.stringify({ type: "start", token }));
 
   socket.onmessage = (event) => {
+    // After hanging up, the rest of the turn is neither played nor shown.
+    if (endReason === "caller_hung_up") return;
     if (event.data instanceof ArrayBuffer) {
       const frame = parseAudioFrame(event.data);
       startsIn = null;
@@ -338,7 +340,18 @@ function openCall(sessionId, context, microphone) {
     call = null;
   };
 
-  return { hangUp: () => send({ type: "hang_up" }) };
+  return {
+    // Quiet at once: the server may still be finishing the turn the caller
+    // spoke last (its tools and history stay consistent) before it closes.
+    hangUp() {
+      endReason = "caller_hung_up";
+      send({ type: "hang_up" });
+      microphone.getTracks().forEach((track) => track.stop());
+      context.suspend();
+      $("hang-up").disabled = true;
+      setStatus(END_REASONS.caller_hung_up);
+    },
+  };
 }
 
 // --- wiring --------------------------------------------------------------------

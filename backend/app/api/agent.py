@@ -4,8 +4,9 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict, StringConstraints
 from sqlalchemy.orm import Session
 
+from backend.app import config
 from backend.app.agent.llm import LLMClient
-from backend.app.agent.loop import run_turn
+from backend.app.agent.loop import SessionBusyError, run_turn
 from backend.app.agent.prompts import SYSTEM_PROMPT
 from backend.app.agent.sessions import SessionStore, SessionStoreFullError
 from backend.app.api.providers import get_llm, get_session_store
@@ -90,5 +91,9 @@ def send_turn(
     if session is None:
         raise HTTPException(status_code=404, detail="Session not found")
 
-    result = run_turn(session, body.text, llm=llm, db=db, system=SYSTEM_PROMPT)
+    try:
+        result = run_turn(session, body.text, llm=llm, db=db, system=SYSTEM_PROMPT,
+                          lock_timeout=config.TURN_LOCK_WAIT_S)
+    except SessionBusyError:
+        raise HTTPException(status_code=409, detail="Still answering your last message") from None
     return TurnResponse(reply=result.reply, handed_off=result.handed_off)

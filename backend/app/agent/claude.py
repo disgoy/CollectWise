@@ -6,6 +6,7 @@ from typing import Any
 
 import anthropic
 
+from backend.app import config
 from backend.app.agent.llm import LLMResponse, LLMUnavailableError
 
 logger = logging.getLogger(__name__)
@@ -16,6 +17,9 @@ FALLBACK_BETA = "server-side-fallback-2026-07-01"
 
 # Thinking counts toward max_tokens even though its text isn't returned.
 DEFAULT_MAX_TOKENS = 16000
+
+# Reaching the API at all should be quick; the read timeout is config's.
+CONNECT_TIMEOUT_S = 5.0
 
 # Blocks a declined attempt can leave before a `fallback` block in a streamed
 # reply. They must not be sent back to the API, and a tool call from the
@@ -133,5 +137,11 @@ class ClaudeClient:
 
 def build_claude_client(*, model: str, effort: str) -> ClaudeClient:
     """Credentials resolve the SDK's usual way (ANTHROPIC_API_KEY, or an
-    `ant auth login` profile). Constructing the client makes no request."""
-    return ClaudeClient(anthropic.Anthropic(), model=model, effort=effort)
+    `ant auth login` profile). Constructing the client makes no request.
+    Timeouts and retries come from config (M6.1); a timeout surfaces as
+    LLMUnavailableError like any other outage."""
+    client = anthropic.Anthropic(
+        timeout=anthropic.Timeout(config.AGENT_TIMEOUT_S, connect=CONNECT_TIMEOUT_S),
+        max_retries=config.AGENT_MAX_RETRIES,
+    )
+    return ClaudeClient(client, model=model, effort=effort)

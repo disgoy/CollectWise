@@ -48,6 +48,15 @@ AGENT_LLM = os.environ.get("COLLECTWISE_AGENT_LLM")
 AGENT_MODEL = os.environ.get("COLLECTWISE_AGENT_MODEL", "claude-sonnet-5-5")
 # Claude Sonnet 5.5 starting point for multi-step tool use; measure in evals.
 AGENT_EFFORT = os.environ.get("COLLECTWISE_AGENT_EFFORT", "medium")
+# The longest the agent waits on Claude for the next piece of a reply, and how
+# often a failed call is retried (M6.1). The SDK's defaults (10 minutes, 2
+# retries) could leave a caller in silence for minutes; this way the caller
+# hears "having trouble" after about 30 seconds at most.
+AGENT_TIMEOUT_S = float(os.environ.get("COLLECTWISE_AGENT_TIMEOUT_S", "15"))
+AGENT_MAX_RETRIES = int(os.environ.get("COLLECTWISE_AGENT_MAX_RETRIES", "1"))
+# How long a typed message waits for the conversation's previous turn to
+# finish before it is refused with 409 (M6.1).
+TURN_LOCK_WAIT_S = float(os.environ.get("COLLECTWISE_TURN_LOCK_WAIT_S", "5"))
 
 # Transcripts the speech service is less sure of than this get "say that
 # again" instead of reaching the agent (D60). 0.6 from the 4.7 voice checks
