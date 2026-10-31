@@ -147,10 +147,17 @@ set -a; source .env; set +a
 COLLECTWISE_DEMO_LOGIN=1 COLLECTWISE_AGENT_LLM=anthropic COLLECTWISE_SPEECH=deepgram uvicorn backend.app.main:app
 ```
 
+`.env` needs `COLLECTWISE_SESSION_SECRET` (32+ random characters) besides the API keys: it signs
+the sign-in tokens.
+
 Open http://127.0.0.1:8000/live, sign in as the demo customer, press Start call
 and allow the microphone. Headphones work best. The page is plain HTML and
 JavaScript served by the app with a strict Content-Security-Policy; its logic
 is tested with `node --test backend/tests/js/` (also run by pytest).
+
+To measure a call: [docs/LIVE_CALL_CHECKLIST.md](docs/LIVE_CALL_CHECKLIST.md) (what to try), then
+`python -m scripts.live_report --minutes 30` (speed and hearing, numbers only) and
+`run_voice_checks --live` (the live confidence threshold, through Flux).
 
 ### Live call protocol
 

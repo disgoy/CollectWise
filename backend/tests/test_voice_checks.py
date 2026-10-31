@@ -254,3 +254,108 @@ def test_recordings_only_transcribes_your_files_and_nothing_else(monkeypatch, tm
     assert {(r["source"], r["phrase_id"], r["noise"], r["correct"]) for r in rows} == {
         ("you", "confirm_yes", None, True), ("you", "confirm_yes", 10, True),
     }
+
+
+# --- live hearing (M5.7) -----------------------------------------------------------
+
+import asyncio  # noqa: E402
+
+from backend.app.voice.live_speech import HeardEvent  # noqa: E402
+from evals.voice_checks.live_hearing import FRAME_MS, LEAD_SILENCE_S, TRAIL_SILENCE_S, frames, hear_live  # noqa: E402
+
+
+class FinishingListener:
+    """Says its scripted turns once the audio is finished, like Flux does."""
+
+    def __init__(self, turns: list[HeardEvent]) -> None:
+        self.turns = turns
+        self.audio: list[bytes] = []
+        self.done = asyncio.Event()
+
+    async def send_audio(self, chunk: bytes) -> None:
+        self.audio.append(chunk)
+
+    async def finish(self) -> None:
+        self.done.set()
+
+    async def events(self):
+        await self.done.wait()
+        for turn in self.turns:
+            yield turn
+
+
+class OneListenerSTT:
+    def __init__(self, listener: FinishingListener) -> None:
+        self.listener = listener
+        self.opened_with: dict | None = None
+
+    def open(self, *, sample_rate: int, keyterms=()):
+        from contextlib import asynccontextmanager
+
+        stt = self
+
+        @asynccontextmanager
+        async def opened():
+            stt.opened_with = {"sample_rate": sample_rate}
+            yield stt.listener
+
+        return opened()
+
+
+def test_a_clip_is_streamed_in_80_ms_frames_with_quiet_around_it() -> None:
+    clip = tone(1.0, rate=8_000)
+    chunks = frames(clip)
+    frame_bytes = 8_000 * 2 * FRAME_MS // 1000
+
+    assert all(len(chunk) == frame_bytes for chunk in chunks)
+    expected = (LEAD_SILENCE_S + 1.0 + TRAIL_SILENCE_S) * 1000 / FRAME_MS
+    assert abs(len(chunks) - expected) <= 1
+    assert chunks[0] == bytes(frame_bytes)  # starts quiet
+    assert chunks[-1] == bytes(frame_bytes)  # ends quiet
+
+
+def test_live_hearing_collects_the_final_turns_and_their_confidences() -> None:
+    listener = FinishingListener([
+        HeardEvent("speech_started", ""),
+        HeardEvent("update", "pay one"),
+        HeardEvent("end_of_turn", "Pay 120.", (0.9, 0.6)),
+        HeardEvent("end_of_turn", "  ", ()),
+        HeardEvent("end_of_turn", "From main.", (1.0, 0.8)),
+    ])
+    stt = OneListenerSTT(listener)
+    clip = tone(0.4, rate=8_000)  # like the synthetic phone-quality voices
+
+    hearing = asyncio.run(hear_live(stt, clip, pace=1000))
+
+    assert hearing.text == "Pay 120. From main."
+    assert hearing.word_confidences == (0.9, 0.6, 1.0, 0.8)
+    assert hearing.mean == pytest.approx(0.825) and hearing.lowest == 0.6
+    assert stt.opened_with == {"sample_rate": 8_000}
+    assert b"".join(listener.audio).find(clip.data) > 0  # the clip itself went through, after the quiet
+
+
+def test_nothing_heard_has_no_confidence() -> None:
+    hearing = asyncio.run(hear_live(OneListenerSTT(FinishingListener([])), tone(0.2), pace=1000))
+
+    assert (hearing.text, hearing.mean, hearing.lowest) == ("", None, None)
+
+
+def test_the_threshold_table_can_use_the_lowest_word() -> None:
+    rows = [
+        {**row(True, 0.9), "confidence_min": 0.5},   # mean passes 0.6, lowest would block it
+        {**row(False, 0.7), "confidence_min": 0.3},  # misheard: lowest would catch it, mean wouldn't
+    ]
+
+    by_mean = {e["threshold"]: e for e in threshold_table(rows)}[0.6]
+    by_lowest = {e["threshold"]: e for e in threshold_table(rows, "confidence_min")}[0.6]
+
+    assert (by_mean["blocked_correct"], by_mean["passed_wrong"]) == (0, 1)
+    assert (by_lowest["blocked_correct"], by_lowest["passed_wrong"]) == (1, 0)
+
+
+def test_a_live_summary_shows_both_threshold_tables() -> None:
+    live = summarize([{**row(True, 0.9), "confidence_min": 0.5}])
+    rest = summarize([row(True, 0.9)])
+
+    assert "lowest word" in live and "|" in live
+    assert "lowest word" not in rest

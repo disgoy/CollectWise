@@ -11,16 +11,22 @@ matter, is the confidence threshold right, and where does speaking time go?
    of audio versus the whole reply (the number streaming in M5 depends on).
 4. Listening samples: one amount written four ways, for you to compare by ear.
 
-Spends Deepgram credit (about $0.10). No Claude calls. Runs only with
-COLLECTWISE_SPEECH=deepgram and DEEPGRAM_API_KEY set.
+With --live (M5.7), clips are heard the way a live call hears them: streamed
+into Flux in 80 ms frames (at --pace times real time), scored the same way,
+with threshold tables for the average and the lowest word confidence. Live
+mode uses --voices 1 and noise levels clean / 10 dB, and skips parts 3-4.
+
+Spends Deepgram credit (about $0.10; live mode a few cents). No Claude calls.
+Runs only with COLLECTWISE_SPEECH=deepgram and DEEPGRAM_API_KEY set.
 
 Usage, from the repo root:
     set -a; source .env; set +a
     COLLECTWISE_SPEECH=deepgram python -m evals.voice_checks.run_voice_checks \\
-        [--recordings evals/voice_checks/recordings]
+        [--recordings evals/voice_checks/recordings] [--live]
 """
 
 import argparse
+import asyncio
 import json
 import os
 import random
@@ -33,6 +39,8 @@ from pathlib import Path
 PHRASES_PATH = Path(__file__).with_name("phrases.json")
 VOICES = ["aura-2-thalia-en", "aura-2-draco-en", "aura-2-amalthea-en"]  # US, British, Filipino
 NOISE_LEVELS = [None, 20, 10, 5]  # SNR in dB; None = clean
+LIVE_NOISE_LEVELS = [None, 10]  # streaming takes real time, so fewer levels
+FLUX_PER_MINUTE = 0.0077  # deepgram.com/pricing, checked 2026-10-31
 CALLER_SAMPLE_RATE = 8_000  # phone quality
 
 REPLIES = {
@@ -57,6 +65,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--out", type=Path, help="output folder (default: a new temp folder)")
     parser.add_argument("--recordings-only", action="store_true",
                         help="test only your recordings: skip the synthetic voices, timing and samples")
+    parser.add_argument("--live", action="store_true",
+                        help="hear clips through live (streaming) Flux, as a live call does")
+    parser.add_argument("--pace", type=float, default=2.0, help="live mode: times real time to stream at")
+    parser.add_argument("--voices", type=int, help="how many synthetic voices (default: 3, or 1 with --live)")
     args = parser.parse_args(argv)
     if args.recordings_only and not args.recordings:
         print("--recordings-only needs --recordings.", file=sys.stderr)
@@ -73,8 +85,10 @@ def main(argv: list[str] | None = None) -> int:
     from backend.app import config
     from backend.app.voice.audio import AudioFormatError, read_wav, write_wav
     from backend.app.voice.deepgram import REQUEST_OPTIONS, TTS_SAMPLE_RATE, DeepgramSTT, DeepgramTTS
+    from backend.app.voice.deepgram_live import DeepgramLiveSTT
     from backend.app.voice.speech import SpeechUnavailableError
     from evals.costs import deepgram_stt_cost, deepgram_tts_cost
+    from evals.voice_checks.live_hearing import LEAD_SILENCE_S, TRAIL_SILENCE_S, hear_live
     from evals.voice_checks.noise import add_noise
     from evals.voice_checks.scoring import heard_fact, is_correct, summarize
 
@@ -83,29 +97,46 @@ def main(argv: list[str] | None = None) -> int:
     (out / "caller").mkdir(parents=True, exist_ok=True)
     client = DeepgramClient(api_key=os.environ["DEEPGRAM_API_KEY"])
     stt = DeepgramSTT(client, model=config.STT_MODEL)
+    if args.live:
+        from deepgram import AsyncDeepgramClient
+
+        live_stt = DeepgramLiveSTT(
+            AsyncDeepgramClient(api_key=os.environ["DEEPGRAM_API_KEY"]), model=config.LIVE_STT_MODEL,
+            eot_threshold=config.EOT_THRESHOLD, eot_timeout_ms=config.EOT_TIMEOUT_MS,
+        )
+    voices = VOICES[: args.voices if args.voices is not None else (1 if args.live else len(VOICES))]
+    noise_levels = LIVE_NOISE_LEVELS if args.live else NOISE_LEVELS
+    streamed_seconds = 0.0
     rng = random.Random(4_7)  # same noise every run
     rows: list[dict] = []
     errors: list[str] = []
     tts_chars = 0
 
     def listen(source: str, phrase: dict, clip, noise) -> None:
+        nonlocal streamed_seconds
         heard_clip = add_noise(clip, noise, rng)
         started = time.perf_counter()
         try:
-            transcript = stt.transcribe(heard_clip)
+            if args.live:
+                hearing = asyncio.run(hear_live(live_stt, heard_clip, pace=args.pace))
+                text, confidence, lowest = hearing.text, hearing.mean, hearing.lowest
+                streamed_seconds += heard_clip.duration_ms / 1000 + LEAD_SILENCE_S + TRAIL_SILENCE_S
+            else:
+                transcript = stt.transcribe(heard_clip)
+                text, confidence, lowest = transcript.text, transcript.confidence, None
         except SpeechUnavailableError as exc:
             errors.append(f"{source} {phrase['id']} noise={noise}: {exc}")
             return
         rows.append({
             "source": source, "noise": noise, "phrase_id": phrase["id"], "kind": phrase["kind"],
-            "expect": phrase["expect"], "transcript": transcript.text, "confidence": transcript.confidence,
-            "heard": heard_fact(phrase["kind"], transcript.text),
-            "correct": is_correct(phrase["kind"], phrase["expect"], transcript.text),
+            "expect": phrase["expect"], "transcript": text, "confidence": confidence, "confidence_min": lowest,
+            "heard": heard_fact(phrase["kind"], text),
+            "correct": is_correct(phrase["kind"], phrase["expect"], text),
             "stt_ms": round((time.perf_counter() - started) * 1000), "audio_ms": heard_clip.duration_ms,
         })
 
     print(f"Writing to {out}")
-    for voice in [] if args.recordings_only else VOICES:
+    for voice in [] if args.recordings_only else voices:
         speaker = DeepgramTTS(client, voice=voice, sample_rate=CALLER_SAMPLE_RATE)
         for phrase in phrases:
             try:
@@ -115,7 +146,7 @@ def main(argv: list[str] | None = None) -> int:
                 continue
             tts_chars += len(phrase["text"])
             (out / "caller" / f"{voice}_{phrase['id']}.wav").write_bytes(write_wav(clip))
-            for noise in NOISE_LEVELS:
+            for noise in noise_levels:
                 listen(voice, phrase, clip, noise)
         print(f"  {voice}: done")
 
@@ -137,7 +168,7 @@ def main(argv: list[str] | None = None) -> int:
 
     # Speaking time: first audio chunk versus the whole reply.
     timing = []
-    for size, text in {} if args.recordings_only else REPLIES.items():
+    for size, text in {} if args.recordings_only or args.live else REPLIES.items():
         started = time.perf_counter()
         first = None
         total_bytes = 0
@@ -157,7 +188,7 @@ def main(argv: list[str] | None = None) -> int:
 
     # Listening samples for you.
     agent_voice = DeepgramTTS(client, voice=config.TTS_VOICE)
-    for style, text in {} if args.recordings_only else AMOUNT_STYLES.items():
+    for style, text in {} if args.recordings_only or args.live else AMOUNT_STYLES.items():
         (out / f"amount_{style}.wav").write_bytes(write_wav(agent_voice.synthesize(text)))
         tts_chars += len(text)
 
@@ -177,8 +208,14 @@ def main(argv: list[str] | None = None) -> int:
         print(f"\nErrors ({len(errors)}):")
         for error in errors:
             print(f"  {error}")
-    audio_minutes = sum(r["audio_ms"] for r in rows) / 60_000
-    print(f"\nDeepgram use: {audio_minutes:.1f} min transcribed (~${deepgram_stt_cost(audio_minutes * 60):.3f}), "
+    if args.live:
+        # Flux bills the audio streamed, quiet padding included.
+        minutes = streamed_seconds / 60
+        listening = f"{minutes:.1f} min streamed to Flux (~${minutes * FLUX_PER_MINUTE:.3f})"
+    else:
+        audio_minutes = sum(r["audio_ms"] for r in rows) / 60_000
+        listening = f"{audio_minutes:.1f} min transcribed (~${deepgram_stt_cost(audio_minutes * 60):.3f})"
+    print(f"\nDeepgram use: {listening}, "
           f"{tts_chars} characters spoken (~${deepgram_tts_cost(tts_chars):.3f}); from the free credit")
     print(f"Listen to {out}/amount_*.wav (and caller/ for the test voices). Full results: {out}/results.json")
     return 0

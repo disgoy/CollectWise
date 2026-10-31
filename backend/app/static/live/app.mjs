@@ -81,7 +81,10 @@ async function demoSignIn(customer) {
     body: JSON.stringify({ customer_id: customer.customer_id }),
   });
   if (!response.ok) {
-    setStatus(`Sign-in failed (${response.status}).`, { error: true });
+    const reason = response.status === 503
+      ? "The server can't sign tokens: set COLLECTWISE_SESSION_SECRET (32+ characters) and restart it."
+      : `Sign-in failed (${response.status}).`;
+    setStatus(reason, { error: true });
     return;
   }
   signedIn((await response.json()).token, customer.display_name);

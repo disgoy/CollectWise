@@ -69,16 +69,18 @@ def _confidences(rows: list[dict]) -> str:
     return f"min {values[0]:.2f}, median {statistics.median(values):.2f}, max {values[-1]:.2f} (n={len(values)})"
 
 
-def threshold_table(rows: list[dict]) -> list[dict]:
+def threshold_table(rows: list[dict], key: str = "confidence") -> list[dict]:
     """For each threshold: correct transcripts it would wrongly block, and
-    wrong ones it would let through to the agent."""
+    wrong ones it would let through to the agent. `key` picks the confidence:
+    "confidence" (per transcript, or the mean word score live) or
+    "confidence_min" (the lowest word score, live only)."""
     table = []
     for threshold in THRESHOLDS:
         blocked_correct = sum(
-            r["correct"] and r["confidence"] is not None and r["confidence"] < threshold for r in rows
+            r["correct"] and r.get(key) is not None and r[key] < threshold for r in rows
         )
         passed_wrong = sum(
-            not r["correct"] and (r["confidence"] is None or r["confidence"] >= threshold) for r in rows
+            not r["correct"] and (r.get(key) is None or r[key] >= threshold) for r in rows
         )
         table.append({"threshold": threshold, "blocked_correct": blocked_correct, "passed_wrong": passed_wrong})
     return table
@@ -104,9 +106,17 @@ def summarize(rows: list[dict]) -> str:
     lines.append("Confidence when heard correctly: " + _confidences([r for r in rows if r["correct"]]))
     lines.append("Confidence when heard wrongly:   " + _confidences([r for r in rows if not r["correct"]]))
 
+    live = any(r.get("confidence_min") is not None for r in rows)
     lines.append("Threshold check (blocked correct = needless 'say that again'; passed wrong = misheard reaches agent):")
-    for entry in threshold_table(rows):
-        lines.append(f"  {entry['threshold']:.1f}: blocked correct {entry['blocked_correct']:3}, passed wrong {entry['passed_wrong']:3}")
+    if live:
+        lines.append("  live: left = average word confidence (what the live guard uses), right = lowest word")
+        for mean, lowest in zip(threshold_table(rows), threshold_table(rows, "confidence_min"), strict=True):
+            left = f"blocked correct {mean['blocked_correct']:3}, passed wrong {mean['passed_wrong']:3}"
+            right = f"blocked correct {lowest['blocked_correct']:3}, passed wrong {lowest['passed_wrong']:3}"
+            lines.append(f"  {mean['threshold']:.1f}: {left}   |   {right}")
+    else:
+        for entry in threshold_table(rows):
+            lines.append(f"  {entry['threshold']:.1f}: blocked correct {entry['blocked_correct']:3}, passed wrong {entry['passed_wrong']:3}")
 
     wrong = [r for r in rows if not r["correct"]]
     lines.append(f"Wrongly heard ({len(wrong)}):")
