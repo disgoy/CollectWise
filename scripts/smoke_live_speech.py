@@ -10,9 +10,17 @@ Part 2 runs our adapters end to end: speaks three phrases over the Aura
 socket, streams the audio into Flux at real-time pace, and prints the turn
 events with timings, how numbers come out, and the word confidences.
 
+With --hindi (M7.6 B2) the same two parts check a Hindi call instead: the
+Flux voice socket (/v2/speak, Rahul) — what Flushed reports, whether audio
+still comes after Interrupt, whether SpeechInterrupted comes with nothing
+queued, and whether 25 quick flushes draw a warning (Aura allows 20 a
+minute) — then Rahul's Hinglish into the multilingual listener, once with
+the account names as keyterms and once without (does it take them, and is
+"current" heard right?). A few cents.
+
 Usage, from the repo root:
     set -a; source .env; set +a
-    COLLECTWISE_SPEECH=deepgram python -m scripts.smoke_live_speech [--idle 30]
+    COLLECTWISE_SPEECH=deepgram python -m scripts.smoke_live_speech [--idle 30] [--hindi]
 """
 
 import argparse
@@ -26,11 +34,13 @@ if os.environ.get("COLLECTWISE_SPEECH") != "deepgram" or not os.environ.get("DEE
     sys.exit("Refusing to run: set COLLECTWISE_SPEECH=deepgram and DEEPGRAM_API_KEY (load .env first).")
 
 from deepgram import AsyncDeepgramClient  # noqa: E402
+from deepgram.core.api_error import ApiError  # noqa: E402
 from deepgram.speak.v1.types import SpeakV1Text  # noqa: E402
+from deepgram.speak.v2.types import SpeakV2Speak  # noqa: E402
 from websockets.exceptions import ConnectionClosed  # noqa: E402
 
 from backend.app import config  # noqa: E402
-from backend.app.voice.deepgram_live import DeepgramLiveSTT, DeepgramLiveTTS  # noqa: E402
+from backend.app.voice.deepgram_live import FLUX_VOICE, DeepgramLiveSTT, DeepgramLiveTTS, speak_protocol  # noqa: E402
 from backend.app.voice.live_speech import SegmentDone, SpokenAudio  # noqa: E402
 from evals.costs import deepgram_tts_cost  # noqa: E402
 
@@ -40,6 +50,12 @@ PHRASES = [
     "What's the balance on my savings account?",
 ]
 KEYTERMS = ["main", "savings"]
+HINDI_PHRASES = [
+    "मेरे savings account से दो हज़ार रुपये pay कर दो।",
+    "हाँ, कर दो।",
+    "मेरे current account में कितना balance है?",
+]
+HINDI_KEYTERMS = ["savings", "current"]
 RATE = 16_000  # what Flux gets; the caller's browser will send the same
 FRAME_BYTES = RATE * 2 * 80 // 1000  # 80 ms of 16-bit mono
 FLUX_PER_MINUTE = 0.0077  # deepgram.com/pricing, checked 2026-10-31
@@ -47,11 +63,15 @@ FLUX_PER_MINUTE = 0.0077  # deepgram.com/pricing, checked 2026-10-31
 tts_chars = 0
 
 
-async def aura_facts(client: AsyncDeepgramClient, idle_seconds: int) -> None:
+async def voice_facts(client: AsyncDeepgramClient, voice: str, idle_seconds: int) -> None:
+    """Aura (Text / Clear / Cleared) or a Flux voice (Speak / Interrupt /
+    SpeechInterrupted): the same questions."""
     global tts_chars
-    print("\n=== Part 1: Aura socket behaviour")
-    async with client.speak.v1.connect(
-        model=config.TTS_VOICE, encoding="linear16", sample_rate=24_000, mip_opt_out="true",
+    flux = speak_protocol(voice) is FLUX_VOICE
+    confirmed = "SpeechInterrupted" if flux else "Cleared"
+    print(f"\n=== Part 1: {voice} socket behaviour")
+    async with (client.speak.v2 if flux else client.speak.v1).connect(
+        model=voice, encoding="linear16", sample_rate=24_000, mip_opt_out="true",
     ) as socket:
         log: list[tuple[float, str, object]] = []
         started = time.perf_counter()
@@ -63,7 +83,9 @@ async def aura_facts(client: AsyncDeepgramClient, idle_seconds: int) -> None:
                     if isinstance(message, bytes):
                         log.append((now, "audio", len(message)))
                     else:
-                        log.append((now, getattr(message, "type", "?"), getattr(message, "sequence_id", None)))
+                        label = getattr(message, "sequence_id", None) or getattr(message, "speech_id", None) \
+                            or getattr(message, "code", None)
+                        log.append((now, getattr(message, "type", "?"), label))
             except ConnectionClosed as exc:
                 log.append((time.perf_counter() - started, "closed", type(exc).__name__))
 
@@ -73,43 +95,59 @@ async def aura_facts(client: AsyncDeepgramClient, idle_seconds: int) -> None:
             global tts_chars
             tts_chars += len(text)
             sent = time.perf_counter() - started
-            await socket.send_text(SpeakV1Text(text=text))
+            await (socket.send_speak(SpeakV2Speak(text=text)) if flux else socket.send_text(SpeakV1Text(text=text)))
             await socket.send_flush()
             return sent
 
-        # 1. Three flushes in a row: what do the sequence ids count?
-        sent_at = [await speak(text) for text in ("First sentence.", "Second one.", "Third.")]
+        async def interrupt() -> None:
+            await (socket.send_interrupt() if flux else socket.send_clear())
+
+        # 1. Three flushes in a row: what do the ids count?
+        firsts = ("पहला वाक्य।", "दूसरा।", "तीसरा।") if flux else ("First sentence.", "Second one.", "Third.")
+        sent_at = [await speak(text) for text in firsts]
         await asyncio.sleep(4)
         flushed = [(t, seq) for t, kind, seq in log if kind == "Flushed"]
-        print(f"  Flushed sequence_ids after three flushes: {[seq for _, seq in flushed]}")
+        print(f"  Flushed ids after three flushes: {[seq for _, seq in flushed]}")
         audio_times = [t for t, kind, _ in log if kind == "audio"]
         if audio_times:
             print(f"  first audio {audio_times[0] - sent_at[0]:.2f} s after the first flush")
 
-        # 2. Clear in the middle of a sentence.
+        # 2. Interrupt in the middle of a sentence.
         mark = len(log)
-        await speak("This is a longer sentence that a clear message should cut off well before it finishes.")
+        await speak("यह एक लंबा वाक्य है जिसे बीच में ही रोक दिया जाना चाहिए, इससे पहले कि यह पूरा हो।" if flux else
+                    "This is a longer sentence that a clear message should cut off well before it finishes.")
         for _ in range(60):
             if any(kind == "audio" for _, kind, _ in log[mark:]):
                 break
             await asyncio.sleep(0.05)
         cleared_at = time.perf_counter() - started
-        await socket.send_clear()
+        await interrupt()
         await asyncio.sleep(2.5)
         after = [(t, kind, seq) for t, kind, seq in log[mark:] if t >= cleared_at]
-        cleared = [t for t, kind, _ in after if kind == "Cleared"]
+        cleared = [t for t, kind, _ in after if kind == confirmed]
         before_cleared = sum(n for t, kind, n in after if kind == "audio" and (not cleared or t < cleared[0]))
         after_cleared = sum(n for t, kind, n in after if kind == "audio" and cleared and t > cleared[0])
-        print(f"  after Clear: Cleared received={bool(cleared)}"
+        print(f"  after the interruption: {confirmed} received={bool(cleared)}"
               + (f" ({cleared[0] - cleared_at:.2f} s later)" if cleared else ""))
-        print(f"  audio bytes after Clear but before Cleared: {before_cleared}; after Cleared: {after_cleared}")
-        print(f"  Flushed after Clear: {[seq for _, kind, seq in after if kind == 'Flushed']}")
+        print(f"  audio bytes after it but before {confirmed}: {before_cleared}; after {confirmed}: {after_cleared}")
+        print(f"  Flushed after the interruption: {[seq for _, kind, seq in after if kind == 'Flushed']}")
 
-        # 3. Clear with nothing queued: does Cleared still come?
+        # 3. Interrupt with nothing queued: does the confirmation still come?
         mark = len(log)
-        await socket.send_clear()
+        await interrupt()
         await asyncio.sleep(1.5)
-        print(f"  Clear with nothing queued -> Cleared received={any(k == 'Cleared' for _, k, _ in log[mark:])}")
+        print(f"  interruption with nothing queued -> {confirmed} received="
+              f"{any(k == confirmed for _, k, _ in log[mark:])}")
+
+        # 3b. A Flux voice: Aura caps flushes at 20 a minute; does this one?
+        if flux:
+            mark = len(log)
+            for _ in range(25):
+                await speak("हाँ।")
+            await asyncio.sleep(6)
+            kinds = [(kind, label) for _, kind, label in log[mark:] if kind not in ("audio", "Flushed")]
+            print(f"  25 quick flushes -> Flushed {sum(k == 'Flushed' for _, k, _ in log[mark:])}, "
+                  f"other messages: {kinds or 'none'}")
 
         # 4. Idle: is the socket closed?
         if idle_seconds:
@@ -131,14 +169,15 @@ async def aura_facts(client: AsyncDeepgramClient, idle_seconds: int) -> None:
         await asyncio.wait_for(reader, 10)
 
 
-async def adapters_end_to_end(client: AsyncDeepgramClient) -> float:
+async def adapters_end_to_end(client: AsyncDeepgramClient, *, hindi: bool = False) -> float:
     global tts_chars
-    print("\n=== Part 2: our adapters, Aura -> Flux")
-    speaker_factory = DeepgramLiveTTS(client, voice=config.TTS_VOICE, sample_rate=RATE)
+    voice, phrases = (config.HINDI_TTS_VOICE, HINDI_PHRASES) if hindi else (config.TTS_VOICE, PHRASES)
+    print(f"\n=== Part 2: our adapters, {voice} -> {config.HINDI_STT_MODEL if hindi else config.LIVE_STT_MODEL}")
+    speaker_factory = DeepgramLiveTTS(client, voice=voice, sample_rate=RATE)
     clips: list[bytes] = []
     async with speaker_factory.open() as speaker:
         output = speaker.output()
-        for phrase in PHRASES:
+        for phrase in phrases:
             started = time.perf_counter()
             await speaker.say(phrase)
             await speaker.end_reply()
@@ -153,13 +192,32 @@ async def adapters_end_to_end(client: AsyncDeepgramClient) -> float:
             clips.append(audio)
             print(f"  spoke {len(audio) / 2 / RATE:.1f} s, first audio after {first:.2f} s: {phrase!r}")
 
+    if not hindi:
+        listener_factory = DeepgramLiveSTT(
+            client, model=config.LIVE_STT_MODEL, eot_threshold=config.EOT_THRESHOLD,
+            eot_timeout_ms=config.EOT_TIMEOUT_MS,
+        )
+        return await hear(listener_factory, clips, KEYTERMS)
     listener_factory = DeepgramLiveSTT(
-        client, model=config.LIVE_STT_MODEL, eot_threshold=config.EOT_THRESHOLD, eot_timeout_ms=config.EOT_TIMEOUT_MS,
+        client, model=config.HINDI_STT_MODEL, eot_threshold=config.EOT_THRESHOLD,
+        eot_timeout_ms=config.EOT_TIMEOUT_MS, language_hints=config.HINDI_LANGUAGE_HINTS,
     )
+    print(f"  -- with the account names as keyterms {HINDI_KEYTERMS}:")
+    try:
+        streamed = await hear(listener_factory, clips, HINDI_KEYTERMS)
+    except ApiError as exc:
+        print(f"  the multilingual listener refused keyterms: HTTP {exc.status_code}")
+        streamed = 0.0
+    print("  -- without keyterms:")
+    return streamed + await hear(listener_factory, clips, [])
+
+
+async def hear(listener_factory: DeepgramLiveSTT, clips: list[bytes], keyterms: list[str]) -> float:
+    """Stream the clips into one listener at real-time pace and print its turns."""
     silence = bytes(FRAME_BYTES)
     phrase_ends: list[float] = []
     streamed_seconds = 0.0
-    async with listener_factory.open(sample_rate=RATE, keyterms=KEYTERMS) as listener:
+    async with listener_factory.open(sample_rate=RATE, keyterms=keyterms) as listener:
         started = time.perf_counter()
 
         async def send(frames: bytes) -> None:
@@ -195,11 +253,12 @@ async def adapters_end_to_end(client: AsyncDeepgramClient) -> float:
 
 async def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--idle", type=int, default=30, help="seconds to leave the Aura socket idle (0 to skip)")
+    parser.add_argument("--idle", type=int, default=30, help="seconds to leave the speak socket idle (0 to skip)")
+    parser.add_argument("--hindi", action="store_true", help="check a Hindi call's voice and listener instead")
     args = parser.parse_args()
     client = AsyncDeepgramClient(api_key=os.environ["DEEPGRAM_API_KEY"])
-    await aura_facts(client, args.idle)
-    streamed = await adapters_end_to_end(client)
+    await voice_facts(client, config.HINDI_TTS_VOICE if args.hindi else config.TTS_VOICE, args.idle)
+    streamed = await adapters_end_to_end(client, hindi=args.hindi)
     print(f"\nDeepgram use: {tts_chars} characters spoken (~${deepgram_tts_cost(tts_chars):.3f}), "
           f"{streamed:.0f} s streamed to Flux (~${streamed / 60 * FLUX_PER_MINUTE:.3f}); from the free credit")
     return 0

@@ -1,6 +1,8 @@
-"""Create the synthetic demo customer for the live-call page (M5.6, D84), if
+"""Create the synthetic demo customers for the live-call page (M5.6, D84), if
 missing, in the local database (COLLECTWISE_DATABASE_URL, default
-collectwise.db). No API calls, nothing paid.
+collectwise.db): cust_demo (US dollars) and cust_demo_in (rupees, for Hindi
+calls, M7.6: the same accounts as the eval's cust_priya). No API calls,
+nothing paid.
 
 Usage, from the repo root:
     python -m scripts.seed_demo
@@ -35,6 +37,12 @@ ACCOUNTS = [
     ("acct_demo_main", Decimal("500.00"), "USD", "main"),
     ("acct_demo_savings", Decimal("900.00"), "USD", "savings"),
 ]
+INDIA_CUSTOMER = ("cust_demo_in", "Demo Customer (India)")
+INDIA_ACCOUNTS = [
+    ("acct_demo_in_savings", Decimal("25000.00"), "INR", "savings"),
+    ("acct_demo_in_current", Decimal("1200.00"), "INR", "current"),
+]
+DEMO = [(CUSTOMER, ACCOUNTS), (INDIA_CUSTOMER, INDIA_ACCOUNTS)]
 
 
 def main(argv: list[str] | None = None, ask=getpass.getpass) -> int:
@@ -43,18 +51,18 @@ def main(argv: list[str] | None = None, ask=getpass.getpass) -> int:
     args = parser.parse_args(argv)
     require_current_schema()
     with SessionLocal() as db:
-        customer_id, name = CUSTOMER
-        if db.get(CustomerRecord, customer_id) is None:
-            db.add(CustomerRecord(customer_id=customer_id, display_name=name))
-            db.commit()
-            print(f"created customer {customer_id}")
-        for account_id, balance, currency, label in ACCOUNTS:
-            if get_account_details(db, account_id) is None:
-                create_account(
-                    db, account_id=account_id, customer_id=customer_id, balance=balance,
-                    currency=currency, status=AccountStatus.ACTIVE, label=label,
-                )
-                print(f"created account {label} ({balance} {currency})")
+        for (customer_id, name), accounts in DEMO:
+            if db.get(CustomerRecord, customer_id) is None:
+                db.add(CustomerRecord(customer_id=customer_id, display_name=name))
+                db.commit()
+                print(f"created customer {customer_id}")
+            for account_id, balance, currency, label in accounts:
+                if get_account_details(db, account_id) is None:
+                    create_account(
+                        db, account_id=account_id, customer_id=customer_id, balance=balance,
+                        currency=currency, status=AccountStatus.ACTIVE, label=label,
+                    )
+                    print(f"created account {label} ({balance} {currency}) for {customer_id}")
         if args.phone:
             pin = ask("Phone PIN for the demo customer (6 digits): ")
             if ask("Again: ") != pin:
@@ -68,7 +76,7 @@ def main(argv: list[str] | None = None, ask=getpass.getpass) -> int:
                        PhoneNumberInUseError: "Another customer already has that number."}[type(exc)])
                 return 1
             print("Phone number and PIN set for the demo customer.")
-    print("Demo customer ready. Start the server with COLLECTWISE_DEMO_LOGIN=1 and open /live.")
+    print("Demo customers ready. Start the server with COLLECTWISE_DEMO_LOGIN=1 and open /live.")
     return 0
 
 

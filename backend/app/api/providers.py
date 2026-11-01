@@ -91,9 +91,9 @@ def get_live_llm() -> LLMClient | None:
         return None
 
 
-@lru_cache(maxsize=1)
+@lru_cache(maxsize=2)  # one per language
 def _deepgram_live_speech(
-    stt_model: str, tts_voice: str, eot_threshold: float, eot_timeout_ms: int
+    stt_model: str, tts_voice: str, eot_threshold: float, eot_timeout_ms: int, language_hints: tuple[str, ...] = (),
 ) -> tuple[DeepgramLiveSTT, DeepgramLiveTTS]:
     return build_deepgram_live_speech(
         stt_model=stt_model,
@@ -101,6 +101,7 @@ def _deepgram_live_speech(
         eot_threshold=eot_threshold,
         eot_timeout_ms=eot_timeout_ms,
         api_key=os.environ["DEEPGRAM_API_KEY"],
+        language_hints=language_hints,
     )
 
 
@@ -109,9 +110,10 @@ def _simulated_live_speech(speed: float) -> tuple[SimulatedLiveSTT, SimulatedLiv
     return SimulatedLiveSTT(), SimulatedLiveTTS(speed)
 
 
-def _live_speech() -> tuple[LiveSpeechToText, LiveTextToSpeech] | None:
+def _live_speech(language_code: str = "en") -> tuple[LiveSpeechToText, LiveTextToSpeech] | None:
     # Off unless COLLECTWISE_SPEECH=deepgram and a key is set, like _speech(),
-    # or "simulated" in a load test (M6.5).
+    # or "simulated" in a load test (M6.5). Hindi calls get their own
+    # listener and voice (M7.6); the simulated pair serves every language.
     if config.SPEECH_PROVIDER == "simulated":
         try:
             return _simulated_live_speech(config.SIMULATED_SPEED)
@@ -120,6 +122,9 @@ def _live_speech() -> tuple[LiveSpeechToText, LiveTextToSpeech] | None:
             return None
     if config.SPEECH_PROVIDER != "deepgram" or not deepgram_configured():
         return None
+    if language_code == "hi":
+        return _deepgram_live_speech(config.HINDI_STT_MODEL, config.HINDI_TTS_VOICE, config.EOT_THRESHOLD,
+                                     config.EOT_TIMEOUT_MS, config.HINDI_LANGUAGE_HINTS)
     return _deepgram_live_speech(config.LIVE_STT_MODEL, config.TTS_VOICE, config.EOT_THRESHOLD, config.EOT_TIMEOUT_MS)
 
 
@@ -130,6 +135,16 @@ def get_live_stt() -> LiveSpeechToText | None:
 
 def get_live_tts() -> LiveTextToSpeech | None:
     speech = _live_speech()
+    return None if speech is None else speech[1]
+
+
+def get_hindi_live_stt() -> LiveSpeechToText | None:
+    speech = _live_speech("hi")
+    return None if speech is None else speech[0]
+
+
+def get_hindi_live_tts() -> LiveTextToSpeech | None:
+    speech = _live_speech("hi")
     return None if speech is None else speech[1]
 
 

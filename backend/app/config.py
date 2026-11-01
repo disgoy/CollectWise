@@ -12,12 +12,13 @@ SESSION_TOKEN_SECRET = os.environ.get("COLLECTWISE_SESSION_SECRET")
 SESSION_TOKEN_TTL_SECONDS = int(os.environ.get("COLLECTWISE_SESSION_TTL_SECONDS", "3600"))
 
 # Demo sign-in (D84) for trying live calls locally: off unless set to "1",
-# and only for these synthetic customers. Anyone who can reach a server with
-# it on can act as them, so never switch it on anywhere public.
+# and only for these synthetic customers (cust_demo_in has rupee accounts,
+# for Hindi calls, M7.6). Anyone who can reach a server with it on can act
+# as them, so never switch it on anywhere public.
 DEMO_LOGIN = os.environ.get("COLLECTWISE_DEMO_LOGIN") == "1"
 DEMO_CUSTOMERS = tuple(
     customer.strip()
-    for customer in os.environ.get("COLLECTWISE_DEMO_CUSTOMERS", "cust_demo").split(",")
+    for customer in os.environ.get("COLLECTWISE_DEMO_CUSTOMERS", "cust_demo,cust_demo_in").split(",")
     if customer.strip()
 )
 
@@ -103,5 +104,15 @@ LIVE_MIN_CONFIDENCE = float(os.environ.get("COLLECTWISE_LIVE_MIN_CONFIDENCE", "0
 # Threads for live calls' agent turns (M6.5): about one per call at once;
 # they mostly wait on the model's network replies.
 LIVE_AGENT_THREADS = int(os.environ.get("COLLECTWISE_LIVE_AGENT_THREADS", "64"))
+# Live calls in Hindi (M7.6, D107-D108): the multilingual listener with
+# language hints, and a Hindi Flux voice. Account names go to that listener
+# as keyterms only if COLLECTWISE_HINDI_KEYTERMS=1: whether it accepts them is
+# undocumented (scripts/smoke_live_speech --hindi checks).
+HINDI_STT_MODEL = os.environ.get("COLLECTWISE_HINDI_STT_MODEL", "flux-general-multi")
+HINDI_LANGUAGE_HINTS = tuple(
+    hint.strip() for hint in os.environ.get("COLLECTWISE_HINDI_LANGUAGE_HINTS", "hi,en").split(",") if hint.strip()
+)
+HINDI_TTS_VOICE = os.environ.get("COLLECTWISE_HINDI_TTS_VOICE", "flux-rahul-hi")
+HINDI_KEYTERMS = os.environ.get("COLLECTWISE_HINDI_KEYTERMS") == "1"
 LIVE_MAX_CALL_MINUTES = float(os.environ.get("COLLECTWISE_LIVE_MAX_CALL_MINUTES", "15"))
 LIVE_SILENCE_MINUTES = float(os.environ.get("COLLECTWISE_LIVE_SILENCE_MINUTES", "2"))

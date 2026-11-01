@@ -198,6 +198,10 @@ in its configuration file.
 | `COLLECTWISE_SPEECH` | unset (voice off) | Set to `deepgram` to enable real, paid speech-to-text and text-to-speech |
 | `COLLECTWISE_STT_MODEL` | `nova-3` | Deepgram speech-to-text model |
 | `COLLECTWISE_TTS_VOICE` | `aura-2-thalia-en` | Deepgram voice for spoken replies |
+| `COLLECTWISE_HINDI_STT_MODEL` | `flux-general-multi` | Live listening for Hindi calls |
+| `COLLECTWISE_HINDI_LANGUAGE_HINTS` | `hi,en` | Languages that listener expects |
+| `COLLECTWISE_HINDI_TTS_VOICE` | `flux-rahul-hi` | Voice for Hindi calls (a `flux-*` voice, on `/v2/speak`) |
+| `COLLECTWISE_HINDI_KEYTERMS` | off | `1` sends account names to the Hindi listener as keyterms (`smoke_live_speech --hindi` checks it takes them) |
 | `DEEPGRAM_API_KEY` | none | Deepgram credentials |
 | `COLLECTWISE_SESSION_IDLE_MINUTES` | `15` | A conversation unused this long expires |
 | `COLLECTWISE_MAX_SESSIONS_PER_CUSTOMER` | `3` | Open conversations per customer; a new one replaces their least recently used |
@@ -208,7 +212,7 @@ in its configuration file.
 | `COLLECTWISE_PAYMENT_CONFIRM_TURNS` | `2` | A proposed payment can be confirmed only within this many further caller turns |
 | `COLLECTWISE_PAYMENT_CONFIRM_MINUTES` | `5` | ...and within this many minutes; after that the agent proposes it again |
 | `COLLECTWISE_DEMO_LOGIN` | unset (off) | `1` turns on demo sign-in for the live-call page; local only, never on a public server |
-| `COLLECTWISE_DEMO_CUSTOMERS` | `cust_demo` | Comma-separated synthetic customers demo sign-in may act as |
+| `COLLECTWISE_DEMO_CUSTOMERS` | `cust_demo,cust_demo_in` | Comma-separated synthetic customers demo sign-in may act as |
 | `COLLECTWISE_VOICE_MIN_CONFIDENCE` | `0.6` | Voice turns heard with lower speech-to-text confidence get "say that again" instead of reaching the agent |
 
 To hear the voice turn end to end (real Deepgram and Claude, a few cents):
@@ -258,7 +262,15 @@ COLLECTWISE_DEMO_LOGIN=1 COLLECTWISE_AGENT_LLM=anthropic COLLECTWISE_SPEECH=deep
 the sign-in tokens.
 
 Open http://127.0.0.1:8000/live, sign in as the demo customer, press Start call
-and allow the microphone. Headphones work best. The page is plain HTML and
+and allow the microphone.
+
+**In Hindi (Milestone 7.6):** choose **हिंदी** before Start call, ideally signed in as
+*Demo Customer (India)* (rupee accounts). The conversation is then held in Hindi and Hinglish
+throughout, with the same rules: Deepgram's multilingual listener (`flux-general-multi`, hints
+Hindi and English) hears it, the agent answers in Devanagari with amounts in digits, and a Hindi
+voice (`flux-rahul-hi`) speaks it. The choice is fixed for the call. Typed conversations take
+`{"language": "hi"}` when they start; turn-based voice turns are English only, and phone calls
+too. Measured in [evals/voice_checks/README.md](evals/voice_checks/README.md) (`run_hindi_checks`). Headphones work best. The page is plain HTML and
 JavaScript served by the app with a strict Content-Security-Policy; its logic
 is tested with `node --test backend/tests/js/` (also run by pytest).
 

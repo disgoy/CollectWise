@@ -4,6 +4,7 @@
 
 import { CALLER_RATE, Framer, Resampler, floatToPcm16, parseAudioFrame } from "./audio.mjs";
 import { PlaybackTracker, playOutAtEnd } from "./playback.mjs";
+import { callLabel, conversationBody } from "./language.mjs";
 import { CallTimeline, formatClock, formatDuration } from "./timeline.mjs";
 
 const CLOSE_MESSAGES = {
@@ -171,10 +172,11 @@ function useToken() {
 
 // --- the call ----------------------------------------------------------------
 
-async function createConversation() {
+async function createConversation(language) {
   const response = await fetch("/agent/sessions", {
     method: "POST",
-    headers: { Authorization: `Bearer ${token}` },
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify(conversationBody(language)),
   });
   if (response.status === 401) throw new Error(CLOSE_MESSAGES[4401]);
   if (response.status === 429) throw new Error("Too many new calls just now. Wait a minute and try again.");
@@ -260,11 +262,21 @@ function describe(entry) {
   return `${at} · Agent${delay}`;
 }
 
+function chosenLanguage() {
+  return document.querySelector('input[name="language"]:checked')?.value || "en";
+}
+
+function lockLanguage(locked) {
+  for (const choice of document.querySelectorAll('input[name="language"]')) choice.disabled = locked;
+}
+
 async function startCall() {
   $("start").disabled = true;
+  lockLanguage(true);
   setStatus("Connecting...");
   try {
-    const sessionId = await createConversation();
+    const language = chosenLanguage();
+    const sessionId = await createConversation(language);
     // Created in the click handler: browsers only allow audio after a gesture.
     const context = new AudioContext();
     await context.audioWorklet.addModule("/live/static/capture-worklet.js");
@@ -279,14 +291,15 @@ async function startCall() {
       throw new Error(MICROPHONE_ERRORS[error.name] || "Couldn't use the microphone.");
     }
     setStatus("Connecting...");
-    call = openCall(sessionId, context, microphone);
+    call = openCall(sessionId, context, microphone, callLabel(language));
   } catch (error) {
     setStatus(error.message || "Couldn't start the call.", { error: true });
     $("start").disabled = false;
+    lockLanguage(false);
   }
 }
 
-function openCall(sessionId, context, microphone) {
+function openCall(sessionId, context, microphone, label) {
   const scheme = location.protocol === "https:" ? "wss" : "ws";
   const socket = new WebSocket(`${scheme}://${location.host}/agent/sessions/${encodeURIComponent(sessionId)}/live`);
   socket.binaryType = "arraybuffer";
@@ -347,7 +360,7 @@ function openCall(sessionId, context, microphone) {
           $("clock").textContent = formatDuration(timeline.elapsed());
         }, 250);
         $("hang-up").disabled = false;
-        setStatus("Listening. Go ahead and speak.");
+        setStatus(`${label ? `${label}. ` : ""}Listening. Go ahead and speak.`);
         break;
       case "caller_speaking":
         timeline.callerSpeaking();
@@ -404,6 +417,7 @@ function openCall(sessionId, context, microphone) {
     }
     $("hang-up").disabled = true;
     $("start").disabled = token === null;
+    lockLanguage(false);
     if (event.code !== 1000) setStatus(CLOSE_MESSAGES[event.code] || `The call was cut off (${event.code}).`, { error: true });
     call = null;
   };

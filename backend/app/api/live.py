@@ -20,8 +20,11 @@ from fastapi import APIRouter, Depends, WebSocket
 
 from backend.app.agent.llm import LLMClient
 from backend.app.agent.sessions import SessionStore
+from backend.app import config
 from backend.app.api.providers import (
     get_db_factory,
+    get_hindi_live_stt,
+    get_hindi_live_tts,
     get_live_llm,
     get_live_stt,
     get_live_tts,
@@ -203,6 +206,8 @@ async def live_call(
     llm: LLMClient | None = Depends(get_live_llm),
     stt: LiveSpeechToText | None = Depends(get_live_stt),
     tts: LiveTextToSpeech | None = Depends(get_live_tts),
+    hindi_stt: LiveSpeechToText | None = Depends(get_hindi_live_stt),
+    hindi_tts: LiveTextToSpeech | None = Depends(get_hindi_live_tts),
     db_factory: Callable = Depends(get_db_factory),
     turn_limiter: SlidingWindowLimiter = Depends(get_turn_limiter),
 ) -> None:
@@ -230,6 +235,9 @@ async def live_call(
     if session_id in _live_sessions:
         await websocket.close(code=CLOSE_ALREADY_LIVE)
         return
+    # The conversation's language picks the listener and the voice (M7.6).
+    if session.language == "hi":
+        stt, tts = hindi_stt, hindi_tts
     if llm is None or stt is None or tts is None:
         await websocket.close(code=CLOSE_NOT_CONFIGURED)
         return
@@ -237,6 +245,8 @@ async def live_call(
     _live_sessions.add(session_id)
     try:
         keyterms = await asyncio.to_thread(_account_labels, db_factory, customer_id)
+        if session.language == "hi" and not config.HINDI_KEYTERMS:
+            keyterms = []  # the multilingual listener may not take them (config.HINDI_KEYTERMS)
         link = _WebSocketLink(websocket)
         await websocket.send_text(json.dumps({
             "type": "ready", "sample_rate_in": CALLER_SAMPLE_RATE, "sample_rate_out": tts.sample_rate,

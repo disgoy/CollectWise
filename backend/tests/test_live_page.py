@@ -42,7 +42,7 @@ def test_the_switch_needs_exactly_1(monkeypatch) -> None:
     monkeypatch.setenv("COLLECTWISE_DEMO_CUSTOMERS", " cust_a , ,cust_b")
     assert importlib.reload(config).DEMO_CUSTOMERS == ("cust_a", "cust_b")
     monkeypatch.delenv("COLLECTWISE_DEMO_CUSTOMERS")
-    assert importlib.reload(config).DEMO_CUSTOMERS == ("cust_demo",)
+    assert importlib.reload(config).DEMO_CUSTOMERS == ("cust_demo", "cust_demo_in")
 
 
 def test_only_listed_demo_customers_that_exist_are_offered(demo) -> None:
@@ -108,7 +108,7 @@ def test_an_odd_host_header_is_not_echoed_into_the_policy() -> None:
     assert "connect-src 'self';" in content_security_policy("evil.com; script-src *")
 
 
-PAGE_FILES = ["app.mjs", "audio.mjs", "playback.mjs", "timeline.mjs", "capture-worklet.js", "live.css"]
+PAGE_FILES = ["app.mjs", "audio.mjs", "language.mjs", "playback.mjs", "timeline.mjs", "capture-worklet.js", "live.css"]
 
 
 @pytest.mark.parametrize("name", PAGE_FILES)
@@ -145,3 +145,14 @@ def test_the_page_has_a_call_clock_and_a_copy_button(client) -> None:
 
     assert 'id="clock"' in page
     assert 'id="copy"' in page
+
+
+def test_the_page_offers_english_and_hindi_with_english_chosen(client) -> None:
+    # M7.6: the choice is sent when the conversation starts (language.mjs).
+    page = client.get("/live").text
+
+    assert '<input type="radio" name="language" value="en" checked>' in page
+    assert '<input type="radio" name="language" value="hi">' in page
+    assert 'lang="hi"' in page and "हिंदी" in page
+    script = (REPO / "backend/app/static/live/app.mjs").read_text()
+    assert "body: JSON.stringify(conversationBody(language))" in script

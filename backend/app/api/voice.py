@@ -77,6 +77,10 @@ async def send_voice_turn(
     session = store.get_for_customer(session_id, customer_id)
     if session is None:
         raise HTTPException(status_code=404, detail="Session not found")
+    # Turn-based voice hears and speaks English only (nova-3, Aura): a Hindi
+    # conversation would be misheard. Hindi is spoken on live calls (M7.6).
+    if session.language != "en":
+        raise HTTPException(status_code=422, detail="english_only")
 
     content_type = request.headers.get("content-type", "").split(";")[0].strip().lower()
     if content_type not in WAV_CONTENT_TYPES:

@@ -223,6 +223,11 @@ from backend.tests.test_voice_api import auth, fakes, speak, voice_client  # noq
 
 
 def test_a_hindi_live_call_uses_the_hindi_prompt(live_api) -> None:  # noqa: F811
+    from backend.app.api.providers import get_hindi_live_stt, get_hindi_live_tts
+    from backend.tests.fake_live_speech import ScriptedListener
+
+    app.dependency_overrides[get_hindi_live_stt] = lambda: FakeLiveSTT(ScriptedListener({1: "मेरा balance?"}))
+    app.dependency_overrides[get_hindi_live_tts] = lambda: FakeLiveTTS()
     session_id = live_api.store.create("cust_a", "hi").session_id
 
     with live_api.connect(session_id) as ws:
@@ -234,12 +239,11 @@ def test_a_hindi_live_call_uses_the_hindi_prompt(live_api) -> None:  # noqa: F81
     assert live_api.llm.requests[0]["system"] == HINDI.system_prompt
 
 
-def test_a_hindi_voice_turn_uses_the_hindi_prompt(voice_client, fakes) -> None:  # noqa: F811
-    from backend.app.voice.speech import Transcript
-
+def test_turn_based_voice_refuses_a_hindi_conversation(voice_client, fakes) -> None:  # noqa: F811
+    # It hears and speaks English only; Hindi is for live calls (B2).
     session_id = voice_client.post("/agent/sessions", headers=auth(), json={"language": "hi"}).json()["session_id"]
-    fakes.stt.script.append(Transcript("मेरा balance कितना है?", 0.95))
-    fakes.llm.script.append(say("ठीक है।"))
 
-    assert speak(voice_client, session_id).status_code == 200
-    assert fakes.llm.requests[0]["system"] == HINDI.system_prompt
+    response = speak(voice_client, session_id)
+
+    assert (response.status_code, response.json()["detail"]) == (422, "english_only")
+    assert fakes.stt.clips == [] and fakes.llm.requests == []

@@ -41,6 +41,9 @@ the model is told about them on the next turn (D74).
 | Can't start | Nothing; every reply shows as text | — | The call works as text | `test_no_voice_means_a_text_only_call` |
 | Drops mid-reply | That reply and later ones show as text | — | As above | `test_a_voice_that_fails_mid_call_leaves_the_rest_as_text`, `test_a_voice_that_drops_mid_reply_leaves_this_and_later_replies_as_text` |
 | Stalls: takes the text, sends no audio | Text only; the call carries on after the 60 s audio wait | — | Text shown counts as heard | `test_a_voice_that_stalls_lets_the_call_carry_on_in_text`, `test_a_read_back_shown_as_text_counts_as_heard` |
+| Never confirms an interruption (a Flux voice, M7.6) | The next reply is spoken after at most 2 s of waiting | A warning (no text) | — | `test_an_interruption_never_confirmed_stops_discarding_after_a_wait` |
+| Sends an error mid-reply (a Flux voice) | That reply and later ones show as text | The error code only | As for a drop | `test_an_error_mid_reply_is_an_outage_and_only_its_code_is_logged` |
+| Hindi speech switched off, English on | The Hindi call is refused as not configured (4503); never falls back to English | — | — | `test_a_hindi_call_without_hindi_speech_is_not_configured` |
 
 ## The database
 

@@ -41,3 +41,28 @@ Note anything slow, wrong or odd, and keep the server's terminal output
 
 The report's timings start when Flux decides you've finished; add Flux's own
 end-of-turn lag (0.5-1.2 s measured) for what you experience.
+
+## A call in Hindi (Milestone 7.6)
+
+Same setup; `python -m scripts.seed_demo` also creates *Demo Customer (India)*
+(savings ₹25,000, current ₹1,200). First, once, the free-credit check of the
+Hindi voice and listener (a few cents, no Claude):
+`COLLECTWISE_SPEECH=deepgram python -m scripts.smoke_live_speech --hindi`.
+If it shows the listener takes keyterms and hears "current" better with them,
+add `COLLECTWISE_HINDI_KEYTERMS=1` to the server command.
+
+Sign in as Demo Customer (India), choose **हिंदी**, Start call.
+
+| # | Say or do | Expect | Tests |
+|---|---|---|---|
+| 1 | "मेरे savings account में कितना balance है?" | the answer in Hindi, with 25,000.00 रुपये in digits, in Rahul's voice | listening, the Hindi voice |
+| 2 | "Current account का balance बताओ" | 1,200.00 रुपये | "current" heard right (or "करण": note it) |
+| 3 | "Savings से दो हज़ार रुपये pay कर दो" | read back: 2,000.00 रुपये from savings, and a question | Hindi amounts, read-back |
+| 4 | Say "हाँ हाँ" over that read-back | it reads the payment back again | the read-back rule |
+| 5 | Let it finish, then "हाँ, कर दो" | "recorded" (never "paid"), in Hindi | confirmation |
+| 6 | "डेढ़ लाख रुपये pay करने हैं" | refused as over the limit, explained in Hindi, no codes | the policy, in Hindi |
+| 7 | Mumble something | "माफ़ कीजिए, मैं ठीक से सुन नहीं पाया..." | the guard's Hindi reply |
+| 8 | "मुझे किसी इंसान से बात करनी है" | passed to a member of our team, in Hindi; the call ends | handoff |
+
+Afterwards: `python -m scripts.live_report --minutes 30` as for English
+(it doesn't split by language; note the time of the Hindi call).

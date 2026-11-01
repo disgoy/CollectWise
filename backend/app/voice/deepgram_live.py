@@ -1,5 +1,8 @@
 """Deepgram live speech behind the live_speech contracts (M5.2, D79): Flux
-(`/v2/listen`) for listening and the Aura-2 WebSocket for speaking.
+(`/v2/listen`) for listening and a speak WebSocket for speaking: Aura-2
+(`/v1/speak`) for English, or a Flux voice (`/v2/speak`) such as Hindi's
+`flux-rahul-hi` (M7.6). The two speak sockets work alike; only their
+message names differ (_SpeakProtocol).
 
 Messages are told apart by their `type` field, not their class: the SDK
 (deepgram-sdk 7.16.0) parses the speak socket's "Cleared" and "Warning"
@@ -17,6 +20,7 @@ from typing import Any
 from deepgram import AsyncDeepgramClient
 from deepgram.core.api_error import ApiError
 from deepgram.speak.v1.types import SpeakV1Text
+from deepgram.speak.v2.types import SpeakV2Speak
 from websockets.exceptions import ConnectionClosed
 
 from backend.app.voice.deepgram import MAX_TTS_CHARS, _is_transient
@@ -26,6 +30,9 @@ from backend.app.voice.speech import SpeechUnavailableError
 logger = logging.getLogger(__name__)
 
 LIVE_TTS_SAMPLE_RATE = 24_000
+# After an interruption, audio is discarded until the socket confirms it. A
+# confirmation that never comes mustn't silence the next reply (M7.6).
+INTERRUPT_WAIT_S = 2.0
 
 # Failing to reach or keep a socket: worth a "try again". An ApiError from the
 # handshake is checked by status like the REST adapters (D66).
@@ -149,18 +156,44 @@ class _Segment:
 _CLOSED = object()
 
 
-class _AuraSpeaker:
-    """One Aura socket for one call.
+@dataclass(frozen=True)
+class _SpeakProtocol:
+    """What differs between the speak sockets: how a sentence is sent, how
+    queued speech is dropped, and the message confirming it was."""
 
-    Flushes are capped at 20 per minute, so a reply's first sentence is
+    name: str
+    send_sentence: Callable[[Any, str], Any]
+    send_interrupt: Callable[[Any], Any]
+    interrupted: str
+
+
+AURA = _SpeakProtocol("Aura", lambda socket, text: socket.send_text(SpeakV1Text(text=text)),
+                      lambda socket: socket.send_clear(), "Cleared")
+FLUX_VOICE = _SpeakProtocol("Flux voice", lambda socket, text: socket.send_speak(SpeakV2Speak(text=text)),
+                            lambda socket: socket.send_interrupt(), "SpeechInterrupted")
+
+
+def speak_protocol(voice: str) -> _SpeakProtocol:
+    """Flux voices (flux-*) are on /v2/speak, Aura's on /v1/speak."""
+    return FLUX_VOICE if voice.startswith("flux-") else AURA
+
+
+class _Speaker:
+    """One speak socket (Aura or a Flux voice) for one call.
+
+    Aura caps flushes at 20 per minute (assumed for Flux voices too until
+    measured), so a reply's first sentence is
     flushed at once (fastest first audio) and the rest together at
     end_reply(): at most two per reply. Our own queue of open segments says
     which reply audio belongs to; each Flushed completes the oldest.
     """
 
-    def __init__(self, connect: Callable[[], AbstractAsyncContextManager], sample_rate: int) -> None:
+    def __init__(self, connect: Callable[[], AbstractAsyncContextManager], sample_rate: int,
+                 protocol: _SpeakProtocol = AURA) -> None:
         self.sample_rate = sample_rate
         self._connect = connect
+        self._protocol = protocol
+        self._interrupt_timer: asyncio.Task | None = None
         self._stack: AsyncExitStack | None = None
         self._socket: Any = None
         self._reader: asyncio.Task | None = None
@@ -168,7 +201,7 @@ class _AuraSpeaker:
         self._open: deque[_Segment] = deque()  # sent, audio not complete yet
         self._rest: _Segment | None = None  # the current reply's unflushed sentences
         self._reply_started = False
-        self._discarding = False  # between clear() and Deepgram's Cleared
+        self._discarding = False  # between clear() and the socket confirming it
         self._sentences = 0
         self._segments = 0
 
@@ -205,10 +238,10 @@ class _AuraSpeaker:
                     if self._open:
                         self._output.put_nowait(SpokenAudio(self._open[0].number, message))
                     else:
-                        logger.warning("Aura audio with no reply waiting; dropped")
+                        logger.warning("%s audio with no reply waiting; dropped", self._protocol.name)
                     continue
                 kind = getattr(message, "type", None)
-                if kind == "Cleared":
+                if kind == self._protocol.interrupted:
                     self._discarding = False
                 elif kind == "Flushed":
                     if self._discarding or not self._open:
@@ -216,7 +249,13 @@ class _AuraSpeaker:
                     done = self._open.popleft()
                     self._output.put_nowait(SegmentDone(done.number, tuple(done.sentences)))
                 elif kind == "Warning":
-                    logger.warning("Aura warning %s", message.code)
+                    logger.warning("%s warning %s", self._protocol.name, message.code)
+                elif kind == "Error":
+                    # The code only: the description may quote the text.
+                    logger.warning("%s error %s", self._protocol.name, message.code)
+                    if self._open:  # this reply's audio will never come
+                        self._forget_reply()
+                        self._output.put_nowait(SpeechUnavailableError(f"tts_{message.code}"))
         except ConnectionClosed as exc:
             error = exc
         # The socket closed. Idle, that's harmless: the next say reopens it.
@@ -243,7 +282,7 @@ class _AuraSpeaker:
         else:
             self._rest.sentences.append(number)
         try:
-            await self._socket.send_text(SpeakV1Text(text=sentence))
+            await self._protocol.send_sentence(self._socket, sentence)
             if first:
                 await self._socket.send_flush()
         except ConnectionClosed as exc:
@@ -263,12 +302,24 @@ class _AuraSpeaker:
         self._forget_reply()
         if self._socket is None:
             return
-        # Everything until Deepgram's Cleared belongs to the cleared reply.
+        # Everything until the socket confirms belongs to the cleared reply.
         self._discarding = True
         try:
-            await self._socket.send_clear()
+            await self._protocol.send_interrupt(self._socket)
         except ConnectionClosed:
             self._discarding = False  # nothing more will arrive anyway
+            return
+        # One wait at a time; a wait outliving its confirmation finds nothing to undo.
+        if self._interrupt_timer is not None:
+            self._interrupt_timer.cancel()
+        self._interrupt_timer = asyncio.create_task(self._give_up_waiting())
+
+    async def _give_up_waiting(self) -> None:
+        await asyncio.sleep(INTERRUPT_WAIT_S)
+        if self._discarding:
+            logger.warning("%s never confirmed an interruption; speaking again", self._protocol.name)
+            self._discarding = False
+
 
     async def output(self) -> AsyncIterator[SpokenAudio | SegmentDone]:
         while True:
@@ -290,6 +341,8 @@ class _AuraSpeaker:
             await self._stack.aclose()
         if self._reader is not None:
             self._reader.cancel()
+        if self._interrupt_timer is not None:
+            self._interrupt_timer.cancel()
         self._output.put_nowait(_CLOSED)
 
 
@@ -303,21 +356,23 @@ class DeepgramLiveTTS:
     ) -> None:
         self._client = client
         self._voice = voice
+        self._protocol = speak_protocol(voice)
         self.sample_rate = sample_rate
 
     @asynccontextmanager
-    async def open(self, audio: AudioFormat | None = None) -> AsyncIterator[_AuraSpeaker]:
+    async def open(self, audio: AudioFormat | None = None) -> AsyncIterator[_Speaker]:
         audio = audio or AudioFormat("linear16", self.sample_rate)
+        speak = self._client.speak.v2 if self._protocol is FLUX_VOICE else self._client.speak.v1
 
         def connection() -> AbstractAsyncContextManager:
-            return self._client.speak.v1.connect(
+            return speak.connect(
                 model=self._voice,
                 encoding=audio.encoding,
                 sample_rate=audio.sample_rate,
                 mip_opt_out="true",
             )
 
-        speaker = _AuraSpeaker(connection, audio.sample_rate)
+        speaker = _Speaker(connection, audio.sample_rate, self._protocol)
         # Opened at the start of the call, so the first reply doesn't wait
         # for the handshake.
         await speaker.connect()
@@ -328,11 +383,13 @@ class DeepgramLiveTTS:
 
 
 def build_deepgram_live_speech(
-    *, stt_model: str, tts_voice: str, eot_threshold: float, eot_timeout_ms: int, api_key: str
+    *, stt_model: str, tts_voice: str, eot_threshold: float, eot_timeout_ms: int, api_key: str,
+    language_hints: Sequence[str] = (),
 ) -> tuple[DeepgramLiveSTT, DeepgramLiveTTS]:
     """One async SDK client for both. Creating it makes no request."""
     client = AsyncDeepgramClient(api_key=api_key)
     return (
-        DeepgramLiveSTT(client, model=stt_model, eot_threshold=eot_threshold, eot_timeout_ms=eot_timeout_ms),
+        DeepgramLiveSTT(client, model=stt_model, eot_threshold=eot_threshold, eot_timeout_ms=eot_timeout_ms,
+                        language_hints=language_hints),
         DeepgramLiveTTS(client, voice=tts_voice),
     )
