@@ -34,6 +34,10 @@ async def lifespan(app: FastAPI):
         logger.error("Database schema is out of date (%s, need %s). %s",
                      schema_revision(engine) or "no migrations", head_revision(), UPGRADE_HINT)
     telemetry.configure(config.TRACING)
+    if config.LOAD_TEST:
+        logger.warning(
+            "Load-test mode is ON (COLLECTWISE_LOAD_TEST=1): simulated model and speech may answer callers. "
+            "Never use it on a real server.")
     if config.DEMO_LOGIN:
         logger.warning(
             "Demo sign-in is ON (COLLECTWISE_DEMO_LOGIN=1): anyone who can reach this server can act as "

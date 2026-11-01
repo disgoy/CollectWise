@@ -54,6 +54,12 @@ AGENT_EFFORT = os.environ.get("COLLECTWISE_AGENT_EFFORT", "medium")
 # hears "having trouble" after about 30 seconds at most.
 AGENT_TIMEOUT_S = float(os.environ.get("COLLECTWISE_AGENT_TIMEOUT_S", "15"))
 AGENT_MAX_RETRIES = int(os.environ.get("COLLECTWISE_AGENT_MAX_RETRIES", "1"))
+# Load tests (M6.5): COLLECTWISE_AGENT_LLM=simulated and COLLECTWISE_SPEECH=
+# simulated give free stand-ins timed like the real services, and work only
+# with COLLECTWISE_LOAD_TEST=1. The speed multiplier shortens their waits
+# (tests use it; load tests keep 1).
+LOAD_TEST = os.environ.get("COLLECTWISE_LOAD_TEST") == "1"
+SIMULATED_SPEED = float(os.environ.get("COLLECTWISE_SIMULATED_SPEED", "1"))
 # Logs (M6.3): "text" (default) or "json", one object per line.
 LOG_FORMAT = os.environ.get("COLLECTWISE_LOG_FORMAT", "text")
 # Conversation events and voice/live timing rows older than this are deleted
