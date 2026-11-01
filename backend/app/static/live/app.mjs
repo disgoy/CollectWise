@@ -49,8 +49,8 @@ function signedIn(newToken, who) {
   token = newToken;
   $("signed-in").hidden = false;
   $("signed-in").textContent = `Signed in as ${who}.`;
-  $("start").disabled = false;
-  setStatus("Ready. Press Start call and allow the microphone, or ring the phone number.");
+  setStartable(true);
+  setStatus("Ready. Start a call in English or हिंदी, and allow the microphone.");
   watchPhoneCalls();
 }
 
@@ -262,20 +262,17 @@ function describe(entry) {
   return `${at} · Agent${delay}`;
 }
 
-function chosenLanguage() {
-  return document.querySelector('input[name="language"]:checked')?.value || "en";
+// One button per language (M7.6): the button pressed is the call's language.
+const START_BUTTONS = ["start-en", "start-hi"];
+
+function setStartable(startable) {
+  for (const id of START_BUTTONS) $(id).disabled = !startable;
 }
 
-function lockLanguage(locked) {
-  for (const choice of document.querySelectorAll('input[name="language"]')) choice.disabled = locked;
-}
-
-async function startCall() {
-  $("start").disabled = true;
-  lockLanguage(true);
+async function startCall(language) {
+  setStartable(false);
   setStatus("Connecting...");
   try {
-    const language = chosenLanguage();
     const sessionId = await createConversation(language);
     // Created in the click handler: browsers only allow audio after a gesture.
     const context = new AudioContext();
@@ -294,8 +291,7 @@ async function startCall() {
     call = openCall(sessionId, context, microphone, callLabel(language));
   } catch (error) {
     setStatus(error.message || "Couldn't start the call.", { error: true });
-    $("start").disabled = false;
-    lockLanguage(false);
+    setStartable(true);
   }
 }
 
@@ -416,8 +412,7 @@ function openCall(sessionId, context, microphone, label) {
       closeAudio();
     }
     $("hang-up").disabled = true;
-    $("start").disabled = token === null;
-    lockLanguage(false);
+    setStartable(token !== null);
     if (event.code !== 1000) setStatus(CLOSE_MESSAGES[event.code] || `The call was cut off (${event.code}).`, { error: true });
     call = null;
   };
@@ -439,7 +434,9 @@ function openCall(sessionId, context, microphone, label) {
 // --- wiring --------------------------------------------------------------------
 
 $("use-token").addEventListener("click", useToken);
-$("start").addEventListener("click", startCall);
+for (const id of START_BUTTONS) {
+  $(id).addEventListener("click", () => startCall($(id).dataset.language));
+}
 $("hang-up").addEventListener("click", () => call?.hangUp());
 $("copy").addEventListener("click", async () => {
   if (!lastTimeline) return;

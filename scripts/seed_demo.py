@@ -32,12 +32,12 @@ from backend.app.services.phone_identity import (
     set_phone_and_pin,
 )
 
-CUSTOMER = ("cust_demo", "Demo Customer")
+CUSTOMER = ("cust_demo", "Demo Customer (US, dollars)")
 ACCOUNTS = [
     ("acct_demo_main", Decimal("500.00"), "USD", "main"),
     ("acct_demo_savings", Decimal("900.00"), "USD", "savings"),
 ]
-INDIA_CUSTOMER = ("cust_demo_in", "Demo Customer (India)")
+INDIA_CUSTOMER = ("cust_demo_in", "Demo Customer (India, rupees)")
 INDIA_ACCOUNTS = [
     ("acct_demo_in_savings", Decimal("25000.00"), "INR", "savings"),
     ("acct_demo_in_current", Decimal("1200.00"), "INR", "current"),
@@ -52,10 +52,15 @@ def main(argv: list[str] | None = None, ask=getpass.getpass) -> int:
     require_current_schema()
     with SessionLocal() as db:
         for (customer_id, name), accounts in DEMO:
-            if db.get(CustomerRecord, customer_id) is None:
+            existing = db.get(CustomerRecord, customer_id)
+            if existing is None:
                 db.add(CustomerRecord(customer_id=customer_id, display_name=name))
                 db.commit()
                 print(f"created customer {customer_id}")
+            elif existing.display_name != name:  # a database seeded under an older name
+                existing.display_name = name
+                db.commit()
+                print(f"renamed customer {customer_id} to {name!r}")
             for account_id, balance, currency, label in accounts:
                 if get_account_details(db, account_id) is None:
                     create_account(

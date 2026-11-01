@@ -147,12 +147,15 @@ def test_the_page_has_a_call_clock_and_a_copy_button(client) -> None:
     assert 'id="copy"' in page
 
 
-def test_the_page_offers_english_and_hindi_with_english_chosen(client) -> None:
-    # M7.6: the choice is sent when the conversation starts (language.mjs).
+def test_the_page_starts_a_call_in_either_language_with_one_button(client) -> None:
+    # M7.6: the button pressed is the call's language, sent when the conversation starts.
     page = client.get("/live").text
 
-    assert '<input type="radio" name="language" value="en" checked>' in page
-    assert '<input type="radio" name="language" value="hi">' in page
-    assert 'lang="hi"' in page and "हिंदी" in page
+    assert '<button id="start-en" type="button" data-language="en" disabled>Start call in English</button>' in page
+    assert ('<button id="start-hi" type="button" data-language="hi" lang="hi" disabled>'
+            "हिंदी में कॉल शुरू करें</button>") in page
+    assert 'type="radio"' not in page and 'id="start"' not in page
     script = (REPO / "backend/app/static/live/app.mjs").read_text()
+    assert 'const START_BUTTONS = ["start-en", "start-hi"];' in script
+    assert "startCall($(id).dataset.language)" in script
     assert "body: JSON.stringify(conversationBody(language))" in script

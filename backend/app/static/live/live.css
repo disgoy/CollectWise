@@ -88,8 +88,4 @@ li.agent { background: var(--agent); }
 li .who { display: block; font-size: 0.8rem; color: var(--muted); font-variant-numeric: tabular-nums; }
 li .cut { color: var(--danger); font-size: 0.85rem; }
 .controls { display: flex; align-items: center; flex-wrap: wrap; }
-fieldset.language { border: 0; padding: 0; margin: 0 0 0.75rem; display: flex; gap: 1rem; align-items: center; }
-fieldset.language legend { float: left; margin-right: 0.5rem; font-weight: 600; }
-fieldset.language label { display: inline-flex; align-items: center; gap: 0.35rem; cursor: pointer; }
-fieldset.language input { width: auto; margin: 0; padding: 0; accent-color: var(--accent); }
 .clock { margin-left: auto; font-size: 1.25rem; font-weight: 600; font-variant-numeric: tabular-nums; }

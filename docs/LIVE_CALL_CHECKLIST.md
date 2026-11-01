@@ -17,7 +17,7 @@ CollectWise; your voice goes to Deepgram with model-improvement opt-out on.
 
 | # | Say or do | Expect | Tests |
 |---|---|---|---|
-| 1 | Sign in as the demo customer, Start call, allow the mic | "Listening" | sign-in, mic, connection |
+| 1 | Sign in as the demo customer, Start call in English, allow the mic | "Listening" | sign-in, mic, connection |
 | 2 | "What's the balance on my main account?" | live caption, then the answer spoken (500 USD) | speed, captions |
 | 3 | "And my savings?" | 900 USD | account names heard |
 | 4 | Ask something with a long answer, then say "Stop, the other account" while it speaks | the agent goes quiet at once; the reply is marked "(interrupted)" | barge-in |
@@ -44,14 +44,14 @@ end-of-turn lag (0.5-1.2 s measured) for what you experience.
 
 ## A call in Hindi (Milestone 7.6)
 
-Same setup; `python -m scripts.seed_demo` also creates *Demo Customer (India)*
+Same setup; `python -m scripts.seed_demo` also creates *Demo Customer (India, rupees)*
 (savings ₹25,000, current ₹1,200). First, once, the free-credit check of the
 Hindi voice and listener (a few cents, no Claude):
 `COLLECTWISE_SPEECH=deepgram python -m scripts.smoke_live_speech --hindi`.
 Account names go to the Hindi listener as keyterms (it accepts them; set
 `COLLECTWISE_HINDI_KEYTERMS=0` to compare without).
 
-Sign in as Demo Customer (India), choose **हिंदी**, Start call.
+Sign in as Demo Customer (India, rupees) and press **हिंदी में कॉल शुरू करें**.
 
 | # | Say or do | Expect | Tests |
 |---|---|---|---|

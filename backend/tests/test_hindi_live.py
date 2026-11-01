@@ -131,7 +131,8 @@ def test_the_seed_creates_the_rupee_demo_customer_once(monkeypatch, capsys, db_s
     assert seed_demo.main([]) == 0
     second = capsys.readouterr().out
 
-    assert db_session.get(CustomerRecord, "cust_demo_in").display_name == "Demo Customer (India)"
+    assert db_session.get(CustomerRecord, "cust_demo_in").display_name == "Demo Customer (India, rupees)"
+    assert db_session.get(CustomerRecord, "cust_demo").display_name == "Demo Customer (US, dollars)"
     accounts = {details.label: (str(details.balance), details.currency)
                 for details in list_customer_account_details(db_session, "cust_demo_in")}
     assert accounts == {"savings": ("25000.00", "INR"), "current": ("1200.00", "INR")}
@@ -162,3 +163,22 @@ def test_account_names_for_hindi_are_on_unless_switched_off(monkeypatch, value, 
     finally:
         monkeypatch.delenv("COLLECTWISE_HINDI_KEYTERMS", raising=False)
         importlib.reload(config)
+
+
+def test_the_seed_renames_demo_customers_seeded_under_older_names(monkeypatch, capsys, db_session) -> None:
+    from scripts import seed_demo
+    from backend.app.db.models import CustomerRecord
+    from backend.tests.test_live_report import _Borrowed
+
+    db_session.add_all([CustomerRecord(customer_id="cust_demo", display_name="Demo Customer"),
+                        CustomerRecord(customer_id="cust_demo_in", display_name="Demo Customer (India)")])
+    db_session.commit()
+    monkeypatch.setattr(seed_demo, "SessionLocal", lambda: _Borrowed(db_session))
+    monkeypatch.setattr(seed_demo, "require_current_schema", lambda: None)
+
+    assert seed_demo.main([]) == 0
+
+    assert db_session.get(CustomerRecord, "cust_demo").display_name == "Demo Customer (US, dollars)"
+    assert db_session.get(CustomerRecord, "cust_demo_in").display_name == "Demo Customer (India, rupees)"
+    out = capsys.readouterr().out
+    assert "renamed customer cust_demo to 'Demo Customer (US, dollars)'" in out

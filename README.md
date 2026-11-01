@@ -23,7 +23,7 @@ never executed.
 
 ## Bilingual by design
 
-Choose **English** or **हिंदी** before a call (or `{"language": "hi"}` for typed chat). The
+Start a call with **Start call in English** or **हिंदी में कॉल शुरू करें** (or `{"language": "hi"}` for typed chat). The
 choice sets the whole conversation:
 
 - **Hearing:** English calls use Deepgram Flux; Hindi calls use Flux's multilingual model
@@ -130,8 +130,8 @@ set -a; source .env; set +a
 COLLECTWISE_DEMO_LOGIN=1 COLLECTWISE_AGENT_LLM=anthropic COLLECTWISE_SPEECH=deepgram uvicorn backend.app.main:app
 ```
 
-Open http://127.0.0.1:8000/live, sign in as a demo customer (*Demo Customer (India)* has
-rupee accounts), choose **English** or **हिंदी**, and press **Start call**. A step-by-step
+Open http://127.0.0.1:8000/live, sign in as a demo customer (*Demo Customer (India, rupees)* has
+rupee accounts), and press **Start call in English** or **हिंदी में कॉल शुरू करें**. A step-by-step
 script is in [LIVE_CALL_CHECKLIST.md](docs/LIVE_CALL_CHECKLIST.md).
 
 ### Measure it

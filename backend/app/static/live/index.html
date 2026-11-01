@@ -30,13 +30,9 @@
 
     <section id="call" aria-labelledby="call-title">
       <h2 id="call-title">Call</h2>
-      <fieldset id="language" class="language">
-        <legend>Language</legend>
-        <label><input type="radio" name="language" value="en" checked> English</label>
-        <label lang="hi"><input type="radio" name="language" value="hi"> हिंदी</label>
-      </fieldset>
       <div class="controls">
-        <button id="start" type="button" disabled>Start call</button>
+        <button id="start-en" type="button" data-language="en" disabled>Start call in English</button>
+        <button id="start-hi" type="button" data-language="hi" lang="hi" disabled>हिंदी में कॉल शुरू करें</button>
         <button id="hang-up" type="button" disabled>Hang up</button>
         <span id="clock" class="clock" aria-label="Call time">0:00</span>
       </div>
