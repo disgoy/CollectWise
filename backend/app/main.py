@@ -23,6 +23,7 @@ from backend.app.api.telephony import watch_router as telephony_watch_router
 from backend.app.api.live_page import static_files as live_static_files
 from backend.app import config, telemetry
 from backend.app.logging_setup import configure_logging
+from backend.app.public_host import PublicHostGuard
 from backend.app.voice import live_call
 
 logger = logging.getLogger(__name__)
@@ -77,6 +78,9 @@ app = FastAPI(
         "exclude": _untraced,
     },
 )
+
+# On the public address (a tunnel), only Twilio's routes answer (M7.5).
+app.add_middleware(PublicHostGuard)
 
 app.include_router(customers_router)
 app.include_router(accounts_router)

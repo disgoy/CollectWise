@@ -181,9 +181,22 @@ def test_phone_calls_are_off_unless_configured(phone, client, monkeypatch, missi
 # --- the stream: who may open one ------------------------------------------------------------
 
 
-def test_an_unsigned_stream_gets_no_websocket(phone, client) -> None:
-    with pytest.raises(WebSocketDisconnect), open_stream(client, signature="bm9wZQ=="):
-        pass
+def test_an_unsigned_stream_gets_no_websocket(phone, client, caplog) -> None:
+    with caplog.at_level("INFO", logger="backend.app.api.telephony"):
+        with pytest.raises(WebSocketDisconnect), open_stream(client, signature="bm9wZQ=="):
+            pass
+
+    # Said in the log (a real caller hears only silence), without the signature.
+    assert "Rejected an unsigned or wrongly signed telephony stream" in caplog.text
+    assert "bm9wZQ" not in caplog.text
+
+
+def test_a_signed_stream_is_not_reported_as_rejected(phone, client, caplog) -> None:
+    with caplog.at_level("INFO", logger="backend.app.api.telephony"):
+        with open_stream(client) as ws:
+            ws.send_text(json.dumps({"event": "stop"}))
+
+    assert "Rejected" not in caplog.text
 
 
 @pytest.mark.parametrize("problem", ["another_call", "made_up", "reused"])

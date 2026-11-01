@@ -145,6 +145,15 @@ python -m scripts.seed_demo --phone +15555550100
 and the page shows the call's captions, clock and timeline while you talk on
 the phone. Only that customer's page sees them; nothing is stored.
 
+**A real call from your phone (7.5):** a Twilio trial number pointed at your
+laptop through a free ngrok tunnel, with no deployment and no number that's
+always on. With `COLLECTWISE_PUBLIC_BASE_URL` set, requests to that host
+reach only the webhook and the media stream; every other route is a 404
+there and works as usual on `127.0.0.1`. `python -m scripts.phone_preflight`
+checks the settings, your demo phone PIN and the tunnel (free), and prints
+the webhook URL. The steps, what to try and how to measure it (`live_report
+--phone`) are in [docs/PHONE_CALL_CHECKLIST.md](docs/PHONE_CALL_CHECKLIST.md).
+
 ## Operations MCP server
 
 A read-only [MCP](https://modelcontextprotocol.io) server lets an assistant
@@ -178,7 +187,7 @@ in its configuration file.
 | `COLLECTWISE_AGENT_TIMEOUT_S` | `15` | Longest wait for the next piece of a model reply before the caller hears "having trouble" |
 | `COLLECTWISE_AGENT_MAX_RETRIES` | `1` | Retries of a failed model call |
 | `TWILIO_AUTH_TOKEN` | unset (phone calls off) | Checks that phone-call requests really come from Twilio; keep it in `.env` |
-| `COLLECTWISE_PUBLIC_BASE_URL` | unset (phone calls off) | The public https address Twilio calls; signatures are checked against it |
+| `COLLECTWISE_PUBLIC_BASE_URL` | unset (phone calls off) | The public https address Twilio calls; signatures are checked against it, and requests to its host reach only the phone routes |
 | `COLLECTWISE_LOAD_TEST` | unset (off) | `1` allows `COLLECTWISE_AGENT_LLM=simulated` and `COLLECTWISE_SPEECH=simulated`, free stand-ins for load tests; never on a real server |
 | `COLLECTWISE_LIVE_AGENT_THREADS` | `64` | Threads for live calls' agent turns: about one per simultaneous call |
 | `COLLECTWISE_LOG_FORMAT` | `text` | `json` writes one JSON object per log line, with the trace id when tracing is on |

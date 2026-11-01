@@ -152,9 +152,12 @@ async def media_stream(
     turn_limiter: SlidingWindowLimiter = Depends(get_turn_limiter),
 ) -> None:
     # Checked before accepting: an unsigned handshake gets no WebSocket at all.
-    if not telephony_configured() or not signed_by_twilio(
-        public_url(STREAM_PATH, websocket=True), {}, websocket.headers.get("x-twilio-signature")
-    ):
+    if not telephony_configured():
+        await websocket.close()
+        return
+    if not signed_by_twilio(public_url(STREAM_PATH, websocket=True), {}, websocket.headers.get("x-twilio-signature")):
+        # Said out loud: on a real line this is otherwise silence, then a hang-up.
+        logger.info("Rejected an unsigned or wrongly signed telephony stream")
         await websocket.close()
         return
     await websocket.accept()

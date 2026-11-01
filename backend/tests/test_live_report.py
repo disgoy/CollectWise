@@ -87,3 +87,67 @@ def test_a_score_of_exactly_0_6_is_not_below_it() -> None:
 
     assert "average word                           median 0.59, min 0.59, below 0.6: 1" in report
     assert "lowest word                            median 0.59, min 0.59, below 0.6: 1" in report
+
+
+# --- phone and browser calls (M7.5) ----------------------------------------------------------
+
+PHONE = "sess_phone00000001"
+BROWSER = "sess_browser000001"
+
+
+def verified(session: str, event_type: str = "caller_verified"):
+    from backend.app.db.models import ConversationEventRecord
+    return ConversationEventRecord(session_id=session, customer_id="cust_demo", turn=0, event_type=event_type,
+                                   outcome="verified")
+
+
+def test_phone_calls_are_known_by_their_verification(db_session) -> None:
+    rows = [metric(1, session=PHONE), metric(1, session=BROWSER), metric(1, session="sess_failed0000001")]
+    db_session.add_all(rows + [verified(PHONE), verified("sess_failed0000001", "verification_failed"),
+                               verified("sess_elsewhere00001")])
+    db_session.commit()
+
+    assert live_report.phone_sessions(db_session, rows) == {PHONE}
+    assert live_report.phone_sessions(db_session, []) == set()
+
+
+def test_with_both_kinds_the_headline_is_shown_for_each() -> None:
+    rows = [metric(1, session=PHONE, audio=3400), metric(2, session=PHONE, audio=3600),
+            metric(1, session=BROWSER, audio=2900)]
+
+    report = summarize(rows, phone={PHONE})
+
+    assert "  1 phone call(s), 1 browser call(s)" in report
+    assert "  phone calls                          median   3500 ms" in report
+    assert "  browser calls                        median   2900 ms" in report
+    assert report.count(f"{PHONE[-8:]}  phone  ") == 2
+    assert report.count(f"{BROWSER[-8:]}  browser") == 1
+
+
+def test_with_one_kind_there_is_no_split() -> None:
+    browser_only = summarize([metric(1, session=BROWSER)])
+    phone_only = summarize([metric(1, session=PHONE)], phone={PHONE})
+
+    assert "phone call(s)" not in browser_only and "  phone calls" not in browser_only
+    assert "  1 phone call(s), 0 browser call(s)" in phone_only
+    assert "  phone calls " not in phone_only and "  browser calls" not in phone_only
+
+
+@pytest.mark.parametrize(("flag", "kept"), [([], "2 calls"), (["--phone"], PHONE), (["--browser"], BROWSER)])
+def test_the_command_filters_by_kind_of_call(db_session, capsys, flag, kept) -> None:
+    db_session.add_all([metric(1, session=PHONE), metric(1, session=BROWSER), verified(PHONE)])
+    db_session.commit()
+
+    assert live_report.main(flag, session_factory=lambda: _Borrowed(db_session)) == 0
+
+    out = capsys.readouterr().out
+    if kept == "2 calls":
+        assert "2 caller turns in 2 call(s)" in out
+    else:
+        assert "1 caller turns in 1 call(s)" in out
+        assert kept[-8:] in out
+
+
+def test_phone_and_browser_filters_cant_be_combined(db_session) -> None:
+    with pytest.raises(SystemExit):
+        live_report.main(["--phone", "--browser"], session_factory=lambda: _Borrowed(db_session))
