@@ -15,6 +15,8 @@ from backend.app.api.agent import router as agent_router
 from backend.app.api.voice import router as voice_router
 from backend.app.api.live import router as live_router
 from backend.app.api.demo import router as demo_router
+from backend.app.api.evidence_page import router as evidence_page_router
+from backend.app.api.evidence_page import static_files as evidence_static_files
 from backend.app.api.live_page import router as live_page_router
 from backend.app.api.live_page import static_files as live_static_files
 from backend.app import config, telemetry
@@ -52,7 +54,7 @@ async def lifespan(app: FastAPI):
 def _untraced(scope) -> bool:
     # Health probes and the page's files would only bury the calls.
     path = scope.get("path", "")
-    return path.startswith("/health") or path.startswith("/live/static")
+    return path.startswith(("/health", "/live/static", "/evidence/static"))
 
 
 app = FastAPI(
@@ -83,6 +85,8 @@ app.include_router(live_router)
 app.include_router(demo_router)
 app.include_router(live_page_router)
 app.mount("/live/static", live_static_files, name="live-static")
+app.include_router(evidence_page_router)
+app.mount("/evidence/static", evidence_static_files, name="evidence-static")
 
 
 # Liveness: the process answers. No dependencies, so a database outage never

@@ -232,6 +232,10 @@ What is stored where, for how long, and what never is: [docs/DATA_HANDLING.md](d
 What happens when each part fails (the model, listening, speaking, the database, the caller's
 connection): [docs/FAILURE_MODES.md](docs/FAILURE_MODES.md), each row proven by a test.
 
+**The evidence page:** http://127.0.0.1:8000/evidence shows the evidence report's charts with
+live-call speed from this server's own calls (the rest from local result files or the committed
+snapshot, each section labelled). Its data, `GET /evidence/data`, is open and holds aggregates only.
+
 To measure a call: [docs/LIVE_CALL_CHECKLIST.md](docs/LIVE_CALL_CHECKLIST.md) (what to try), then
 `python -m scripts.live_report --minutes 30` (speed and hearing, numbers only) and
 `run_voice_checks --live` (the live confidence threshold, through Flux).

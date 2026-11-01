@@ -18,11 +18,11 @@ from backend.app.auth.dependencies import ADMIN_KEY_HEADER
 from backend.app.auth.session_tokens import issue_session_token
 from backend.app.db import models
 from backend.app.db.session import get_db
-from backend.app.api import accounts, agent, customers, demo, live, live_page, servicing, voice
+from backend.app.api import accounts, agent, customers, demo, evidence_page, live, live_page, servicing, voice
 from backend.app.main import app
 
 BACK_OFFICE_PREFIXES = ("/customers", "/accounts", "/servicing")
-ROUTER_MODULES = (accounts, agent, customers, demo, live, live_page, servicing, voice)
+ROUTER_MODULES = (accounts, agent, customers, demo, evidence_page, live, live_page, servicing, voice)
 # WebSocket routes aren't in the OpenAPI schema, so they are listed here; each
 # signs in by its first message and has its own tests (test_live_api.py, D83).
 WEBSOCKET_ROUTES = {"/agent/sessions/{session_id}/live"}
@@ -31,9 +31,11 @@ WEBSOCKET_ROUTES = {"/agent/sessions/{session_id}/live"}
 OPEN_ROUTES = {
     ("GET", "/health"), ("GET", "/health/ready"),
     ("GET", "/demo/customers"), ("POST", "/demo/sign-in"),
+    # The evidence page's data: aggregates only, cached (M6.7).
+    ("GET", "/evidence/data"),
 }
-# Routes deliberately left out of the schema: the live-call page (D84).
-HIDDEN_ROUTES = {"/live"}
+# Routes deliberately left out of the schema: the live-call and evidence pages (D84, M6.7).
+HIDDEN_ROUTES = {"/live", "/evidence"}
 
 # Every back-office route, with a body that would succeed with the key.
 ROUTES = [

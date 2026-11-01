@@ -1,7 +1,7 @@
 """What the operations MCP server reports (M6.6): numbers, codes and short
 call references from the database and the eval results. Never customer ids,
 caller words, replies or amounts; the server checks every result with
-build_evidence.check_private before returning it.
+services.evidence.check_private before returning it.
 """
 
 import statistics
@@ -109,9 +109,9 @@ def conversation_outcomes(db: Session, *, minutes: int, now: datetime) -> dict:
 
 
 def eval_results() -> dict:
-    from scripts.build_evidence import EVAL_DIR, load_eval
+    from backend.app.services import evidence
 
-    loaded = load_eval(EVAL_DIR) if EVAL_DIR.is_dir() else {}
+    loaded = evidence.load_eval(evidence.EVAL_DIR) if evidence.EVAL_DIR.is_dir() else {}
     return {
         "versions": [{
             "version": v["version"], "change": v["change"], "conversations": v["conversations"],

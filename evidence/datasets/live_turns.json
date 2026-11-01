@@ -96,5 +96,54 @@
   "first_text_ms": 2619,
   "first_audio_ms": 2941,
   "lookups": 1
+ },
+ {
+  "call": 3,
+  "turn": 1,
+  "first_text_ms": 1220,
+  "first_audio_ms": 1945,
+  "lookups": 2
+ },
+ {
+  "call": 3,
+  "turn": 2,
+  "first_text_ms": 2631,
+  "first_audio_ms": 2887,
+  "lookups": 1
+ },
+ {
+  "call": 3,
+  "turn": 3,
+  "first_text_ms": 933,
+  "first_audio_ms": 1511,
+  "lookups": 0
+ },
+ {
+  "call": 3,
+  "turn": 4,
+  "first_text_ms": 3215,
+  "first_audio_ms": 3484,
+  "lookups": 1
+ },
+ {
+  "call": 3,
+  "turn": 5,
+  "first_text_ms": 2539,
+  "first_audio_ms": 2797,
+  "lookups": 1
+ },
+ {
+  "call": 3,
+  "turn": 6,
+  "first_text_ms": 1503,
+  "first_audio_ms": 2558,
+  "lookups": 2
+ },
+ {
+  "call": 3,
+  "turn": 7,
+  "first_text_ms": 2552,
+  "first_audio_ms": 2828,
+  "lookups": 1
  }
 ]

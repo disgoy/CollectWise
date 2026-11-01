@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CollectWise evidence</title>
+  <link rel="stylesheet" href="/evidence/static/evidence.css">
+  <script type="module" src="/evidence/static/evidence-app.mjs"></script>
+</head>
+<body>
+  <main>
+    <nav aria-label="Pages"><a href="/live">Live call</a> · <span aria-current="page">Evidence</span></nav>
+    <header>
+      <h1>CollectWise: evidence</h1>
+      <p class="note">A voice AI servicing agent for a synthetic bank, measured as it was built. Live-call speed comes from this server's own calls; each section says where its numbers come from.</p>
+      <p><button id="refresh" type="button">Refresh</button> <span id="status" class="note" role="status">Loading…</span></p>
+    </header>
+
+    <section aria-labelledby="headline-title">
+      <h2 id="headline-title">Headline numbers</h2>
+      <div id="headline" class="tiles"></div>
+    </section>
+
+    <section aria-labelledby="quality-title">
+      <h2 id="quality-title">Agent quality</h2>
+      <p class="note">Scripted conversations run through the real agent loop; a conversation passes only if the outcome is right, no compliance rule breaks, and a judge model finds every reply grounded and plain. <span class="source" data-source="eval"></span></p>
+      <div id="quality-chart" class="chart"></div>
+      <details><summary>The numbers</summary><div id="quality-table"></div></details>
+    </section>
+
+    <section aria-labelledby="hearing-title">
+      <h2 id="hearing-title">Hearing</h2>
+      <p class="note">Servicing phrases (amounts, yes and no, account names) heard by speech-to-text, scored on whether the fact survives. <span class="source" data-source="voice"></span></p>
+      <div id="hearing-chart" class="chart"></div>
+      <details><summary>The numbers</summary><div id="hearing-table"></div></details>
+    </section>
+
+    <section aria-labelledby="speed-title">
+      <h2 id="speed-title">Live speed</h2>
+      <p class="note">Each live turn: from the caller finishing (as the speech service decides) to the agent's first audio. <span class="legend"><i class="swatch lookup"></i>looked something up <i class="swatch plain"></i>no lookup <i class="swatch target"></i>target</span> <span class="source" data-source="live"></span></p>
+      <div id="speed-chart" class="chart"></div>
+      <div id="speed-table"></div>
+    </section>
+
+    <section aria-labelledby="engineering-title">
+      <h2 id="engineering-title">Engineering</h2>
+      <p class="note">Automated tests over the project's steps, and deliberate bugs planted in each step's code to check the tests catch them. <span class="source" data-source="facts"></span></p>
+      <div id="tests-chart" class="chart"></div>
+      <details><summary>Deliberate bugs per step</summary><div id="mutation-table"></div></details>
+    </section>
+
+    <footer class="note">
+      More: the <a href="https://claude.ai/artifact/MKYnNm7ioC612k77Uy7KYW">evidence dashboard</a>,
+      <a href="https://github.com/disgoy/CollectWise/blob/main/docs/FAILURE_MODES.md">failure modes</a>,
+      <a href="https://github.com/disgoy/CollectWise/blob/main/docs/DATA_HANDLING.md">data handling</a> and the
+      <a href="https://github.com/disgoy/CollectWise/blob/main/docs/LOAD_TEST.md">load test</a>.
+    </footer>
+  </main>
+</body>
+</html>

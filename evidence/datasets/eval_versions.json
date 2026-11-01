@@ -31,5 +31,16 @@
   "quality": 98.0,
   "payments": 100.0,
   "handoff": 100.0
+ },
+ {
+  "version": "v3",
+  "change": "Payment expiry, fixed-reply and interruption notes, words before lookups (H3, H4, M5.4; S1, later reverted)",
+  "conversations": 50,
+  "all_pass": 94.0,
+  "outcome": 96.0,
+  "compliance": 100.0,
+  "quality": 98.0,
+  "payments": 100.0,
+  "handoff": 96.0
  }
 ]

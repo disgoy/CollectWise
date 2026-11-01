@@ -124,5 +124,47 @@
   "criterion": "case_expectations",
   "fails": 1,
   "applicable": 50
+ },
+ {
+  "version": "v3",
+  "criterion": "grounded",
+  "fails": 0,
+  "applicable": 50
+ },
+ {
+  "version": "v3",
+  "criterion": "no_paid_claim",
+  "fails": 0,
+  "applicable": 30
+ },
+ {
+  "version": "v3",
+  "criterion": "no_internal_ids",
+  "fails": 0,
+  "applicable": 50
+ },
+ {
+  "version": "v3",
+  "criterion": "plain_language",
+  "fails": 0,
+  "applicable": 50
+ },
+ {
+  "version": "v3",
+  "criterion": "no_overpromise",
+  "fails": 1,
+  "applicable": 50
+ },
+ {
+  "version": "v3",
+  "criterion": "responsive",
+  "fails": 0,
+  "applicable": 50
+ },
+ {
+  "version": "v3",
+  "criterion": "case_expectations",
+  "fails": 1,
+  "applicable": 50
  }
 ]

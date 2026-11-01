@@ -123,9 +123,9 @@ def test_service_health_and_eval_results(ops_db, monkeypatch, tmp_path) -> None:
     assert health == {"database": "reachable", "schema_revision": health["latest_revision"],
                       "latest_revision": health["latest_revision"], "schema_current": True}
 
-    from scripts import build_evidence
+    from backend.app.services import evidence
 
-    monkeypatch.setattr(build_evidence, "EVAL_DIR", tmp_path / "none")
+    monkeypatch.setattr(evidence, "EVAL_DIR", tmp_path / "none")
     assert call("eval_results").structured_content == {
         "versions": [], "grader_checks": {}, "note": "No eval results on this machine."}
 

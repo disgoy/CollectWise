@@ -145,5 +145,56 @@
   "first_time": 9,
   "test_gaps": 0,
   "note": "1 had no visible effect: a redundant filter on rows that are never written out"
+ },
+ {
+  "step": "M6.1 failure drills",
+  "bugs": 19,
+  "first_time": 18,
+  "test_gaps": 0,
+  "note": "1 was a redundant condition, removed"
+ },
+ {
+  "step": "M6.2 tracing",
+  "bugs": 28,
+  "first_time": 21,
+  "test_gaps": 7
+ },
+ {
+  "step": "M6.3 logs and retention",
+  "bugs": 22,
+  "first_time": 18,
+  "test_gaps": 3,
+  "note": "1 was an unneeded restore, removed"
+ },
+ {
+  "step": "M6.4 Postgres and migrations",
+  "bugs": 13,
+  "first_time": 11,
+  "test_gaps": 1,
+  "note": "1 has no effect when migrations run"
+ },
+ {
+  "step": "M6.5 load test",
+  "bugs": 16,
+  "first_time": 11,
+  "test_gaps": 5
+ },
+ {
+  "step": "M6.5 load fixes",
+  "bugs": 8,
+  "first_time": 7,
+  "test_gaps": 1
+ },
+ {
+  "step": "M6.6 operations MCP server",
+  "bugs": 16,
+  "first_time": 13,
+  "test_gaps": 3
+ },
+ {
+  "step": "M6.7 evidence page",
+  "bugs": 15,
+  "first_time": 14,
+  "test_gaps": 1
  }
 ]

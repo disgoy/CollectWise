@@ -23,8 +23,8 @@ from sqlalchemy.engine import make_url
 from sqlalchemy.orm import sessionmaker
 
 from backend.app import config
+from backend.app.services.evidence import check_private
 from backend.ops import queries
-from scripts.build_evidence import check_private
 
 DOCS = Path(__file__).resolve().parents[2] / "docs"
 READ_ONLY = ToolAnnotations(read_only_hint=True, destructive_hint=False, idempotent_hint=True, open_world_hint=False)

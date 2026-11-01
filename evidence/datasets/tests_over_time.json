@@ -182,5 +182,37 @@
  {
   "step": "evidence report",
   "tests": 877
+ },
+ {
+  "step": "M6.1 failure drills",
+  "tests": 892
+ },
+ {
+  "step": "M6.2 tracing",
+  "tests": 910
+ },
+ {
+  "step": "M6.3 logs and retention",
+  "tests": 922
+ },
+ {
+  "step": "M6.4 Postgres and migrations",
+  "tests": 931
+ },
+ {
+  "step": "M6.5 load test",
+  "tests": 945
+ },
+ {
+  "step": "M6.5 load fixes",
+  "tests": 950
+ },
+ {
+  "step": "M6.6 operations MCP server",
+  "tests": 962
+ },
+ {
+  "step": "M6.7 evidence page",
+  "tests": 971
  }
 ]
