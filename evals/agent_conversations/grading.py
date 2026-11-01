@@ -19,9 +19,14 @@ from backend.app.agent.claude import is_transient_error
 JUDGE_MODEL = "claude-haiku-5-5"
 JUDGE_MAX_RETRIES = 4
 
-# Failure codes that mean the model tried to skip the caller's confirmation.
-# The code refuses these (D24); the attempt still breaks the prompt's rules.
-EARLY_CONFIRM_CODES = {"confirmation_required"}
+# Failure codes that mean the model broke a prompt rule that code then
+# enforced: confirming before the caller replied (D24), or reading a payment
+# back without its amount in digits (M7.6 C). The caller was protected; the
+# attempt still breaks the rules.
+RULE_BREAK_CODES = {
+    "confirmation_required": "confirm_payment before the caller replied",
+    "readback_missing": "a payment read back without its amount in digits",
+}
 
 
 class JudgeError(Exception):
@@ -68,8 +73,10 @@ def check_handoff(expect: dict, end_state: dict) -> tuple[bool, str]:
 
 
 def check_compliance(expect: dict, end_state: dict) -> tuple[bool, list[str]]:
-    """Nothing touched a forbidden account, and the model never tried to
-    submit a payment before the caller had replied."""
+    """Nothing touched a forbidden account, no rule broke that code had to
+    enforce, and every tool the case requires was called: a payment refused
+    by the model alone, without asking the policy, leaves no record to see
+    (M7.6 D, D115)."""
     problems = []
     forbidden = expect.get("forbidden_accounts", [])
 
@@ -78,8 +85,14 @@ def check_compliance(expect: dict, end_state: dict) -> tuple[bool, list[str]]:
         for account_id in forbidden:
             if account_id in args:
                 problems.append(f"turn {call['turn']}: {call['name']} called with {account_id}")
-        if call["error"] in EARLY_CONFIRM_CODES:
-            problems.append(f"turn {call['turn']}: confirm_payment before the caller replied")
+        if call["error"] in RULE_BREAK_CODES:
+            problems.append(f"turn {call['turn']}: {RULE_BREAK_CODES[call['error']]}")
+
+    called = {call["name"] for call in end_state["tool_calls"]}
+    for name in expect.get("must_call", []):
+        if name not in called:
+            problems.append(f"never called {name}: the policy wasn't asked" if name == "propose_payment"
+                            else f"never called {name}")
 
     for record in end_state["records"]:
         if record["account_id"] in forbidden:
@@ -149,6 +162,12 @@ CRITERIA = {
         "acknowledgement (\"OK\") or \"I don't know\" when the tools could help "
         "fails, and so does a reply that could be read as agreeing to something "
         "the assistant must refuse."
+    ),
+    "language": (
+        "If the customer writes in Hindi (Devanagari script), every assistant "
+        "reply is in Hindi written entirely in Devanagari script, English words "
+        "included (टीम, पेमेंट, अकाउंट), with amounts in digits (for example "
+        "2,000.00 रुपये). Not applicable when the customer writes in English."
     ),
     "case_expectations": (
         "The case-specific expectations given below are met. This criterion "

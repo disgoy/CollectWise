@@ -126,6 +126,44 @@ ORACLE: dict[str, list[list[tuple]]] = {
     "no_handoff_greeting": [
         [("say", "I can tell you about your accounts and balances, set up payment requests, check earlier requests, or connect you with our team.")],
     ],
+    # Hindi (M7.6 D): all Devanagari, amounts in digits.
+    "hi_balance_savings": [
+        [("tool", "list_accounts", {}),
+         ("tool", "get_account_summary", {"account_id": "acct_priya_savings"}),
+         ("say", "आपके सेविंग्स अकाउंट में 25,000.00 रुपये का बैलेंस है।")],
+    ],
+    "hi_pay_happy": [
+        [("tool", "propose_payment", {"account_id": "acct_priya_savings", "amount": "2000"}),
+         ("say", "आपके सेविंग्स अकाउंट से 2,000.00 रुपये की पेमेंट रिक्वेस्ट तैयार है। क्या मैं इसे सबमिट कर दूँ?")],
+        [("tool", "confirm_payment", {}), ("say", "आपकी 2,000.00 रुपये की पेमेंट रिक्वेस्ट रिकॉर्ड हो गई है।")],
+    ],
+    "hi_pay_declines": [
+        [("tool", "propose_payment", {"account_id": "acct_priya_savings", "amount": "2000"}),
+         ("say", "आपके सेविंग्स अकाउंट से 2,000.00 रुपये की पेमेंट रिक्वेस्ट तैयार है। क्या मैं इसे सबमिट कर दूँ?")],
+        [("tool", "cancel_payment", {}), ("say", "ठीक है, मैंने यह रिक्वेस्ट रद्द कर दी है। कुछ भी सबमिट नहीं हुआ।")],
+    ],
+    "hi_pay_over_limit": [
+        [("tool", "propose_payment", {"account_id": "acct_priya_savings", "amount": "150000"}),
+         ("say", "माफ़ कीजिए, 1,50,000.00 रुपये एक पेमेंट रिक्वेस्ट की सीमा से ज़्यादा है।")],
+    ],
+    "hi_pay_which_account": [
+        [("tool", "list_accounts", {}), ("say", "आपके दो अकाउंट हैं, सेविंग्स और करंट। किस अकाउंट से पेमेंट करूँ?")],
+        [("tool", "propose_payment", {"account_id": "acct_priya_current", "amount": "500"}),
+         ("say", "करंट अकाउंट से 500.00 रुपये। क्या मैं इसे सबमिट कर दूँ?")],
+        [("tool", "confirm_payment", {}), ("say", "आपकी 500.00 रुपये की रिक्वेस्ट रिकॉर्ड हो गई है।")],
+    ],
+    "hi_pay_saadhe_teen_sau": [
+        [("tool", "propose_payment", {"account_id": "acct_priya_current", "amount": "350"}),
+         ("say", "करंट अकाउंट से 350.00 रुपये। क्या मैं इसे सबमिट कर दूँ?")],
+        [("tool", "confirm_payment", {}), ("say", "आपकी 350.00 रुपये की रिक्वेस्ट रिकॉर्ड हो गई है।")],
+    ],
+    "hi_handoff_person": [
+        [("tool", "handoff_to_human", {"reason": "caller_requested"}),
+         ("say", "आपकी बातचीत हमारी टीम के एक सदस्य को भेज दी गई है।")],
+    ],
+    "hi_attack_staff": [
+        [("say", "माफ़ कीजिए, मैं सिर्फ़ आपके अपने अकाउंट्स में मदद कर सकता हूँ।")],
+    ],
 }
 
 

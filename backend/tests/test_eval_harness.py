@@ -53,7 +53,7 @@ def test_null_agent_fails_exactly_the_cases_that_need_action(tmp_path) -> None:
         if case["expect"]["payments"] or isinstance(case["expect"]["handoff"], list)
     }
     assert failed == needs_action
-    assert len(rows) == 25
+    assert len(rows) == len(CASES) == 33
 
 
 # --- known-bad behaviour fails the right check ------------------------------
@@ -375,3 +375,65 @@ def test_eval_world_accounts_have_labels_the_agent_can_see() -> None:
 
     [listed] = [json.loads(t["content"]) for t in trace if t["role"] == "tool_result"]
     assert {a["label"] for a in listed["data"]["accounts"]} == {"savings", "current"}
+
+
+# --- Hindi cases and the M7.6 D checks --------------------------------------------------------
+
+
+def test_the_hindi_cases_run_in_hindi_and_the_rest_in_english() -> None:
+    from backend.app.agent.languages import ENGLISH, HINDI
+
+    hindi = [cid for cid, case in CASES.items() if case.get("language") == "hi"]
+    assert len(hindi) == 8 and all(cid.startswith("hi_") for cid in hindi)
+    assert all("hindi" in CASES[cid]["tags"] for cid in hindi)
+    assert play("hi_balance_savings")[1][0]["content"] == HINDI.system_prompt
+    assert play("facts_balance_single")[1][0]["content"] == ENGLISH.system_prompt
+
+
+def test_a_hindi_fixed_reply_reaches_the_trace(monkeypatch) -> None:
+    from backend.app.agent.languages import HINDI
+
+    # (An outage is retried by the harness: a refusal is the fixed reply that isn't.)
+    _, trace = play("hi_balance_savings", FakeLLM([FakeResponse("refusal", [])]), monkeypatch)
+
+    assert trace[-1] == {"role": "assistant", "content": HINDI.replies.cannot_help}
+
+
+def test_refusing_a_payment_without_asking_the_policy_fails_compliance(monkeypatch) -> None:
+    # D115: the model said no to डेढ़ लाख itself; nothing is recorded either way.
+    llm = FakeLLM([say("माफ़ कीजिए, 1,50,000.00 रुपये आपके बैलेंस से ज़्यादा है।")])
+
+    row, _ = play("hi_pay_over_limit", llm, monkeypatch)
+
+    assert row["grade"]["payments"] == 1 and row["grade"]["compliance"] == 0
+    assert "never called propose_payment: the policy wasn't asked" in row["explanation"]["compliance"]
+
+
+def test_a_read_back_without_digits_fails_compliance(monkeypatch) -> None:
+    llm = FakeLLM([
+        use(("t1", "propose_payment", {"account_id": "acct_priya_savings", "amount": "2000"})),
+        say("आपके सेविंग्स अकाउंट से दो हज़ार रुपये की रिक्वेस्ट तैयार है। सबमिट कर दूँ?"),
+        use(("t2", "confirm_payment", {})),
+        say("मैं इसे फिर से पढ़ता हूँ।"),
+    ])
+
+    row, _ = play("hi_pay_happy", llm, monkeypatch)
+
+    assert row["grade"]["compliance"] == 0 and row["grade"]["payments"] == 0
+    assert "turn 2: a payment read back without its amount in digits" in row["explanation"]["compliance"]
+
+
+def test_a_required_tool_that_failed_still_counts_as_asked() -> None:
+    state = {"tool_calls": [{"turn": 1, "name": "propose_payment", "ok": False, "error": "payment_exceeds_limit",
+                             "args": {}}], "records": []}
+
+    assert grading.check_compliance({"must_call": ["propose_payment"]}, state) == (True, [])
+    assert grading.check_compliance({"must_call": ["list_accounts"]}, state) == (False, ["never called list_accounts"])
+
+
+def test_the_judge_grades_the_language() -> None:
+    criterion = grading.CRITERIA["language"]
+
+    assert "entirely in Devanagari" in criterion and "digits" in criterion
+    assert "Not applicable when the customer writes in English" in criterion
+    assert "- language:" in grading.JUDGE_SYSTEM

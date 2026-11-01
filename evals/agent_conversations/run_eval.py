@@ -47,7 +47,7 @@ from backend.app import config
 from backend.app.agent.claude import ClaudeClient
 from backend.app.agent.llm import LLMUnavailableError
 from backend.app.agent.loop import run_turn
-from backend.app.agent.prompts import SYSTEM_PROMPT
+from backend.app.agent.languages import language
 from backend.app.agent.sessions import SessionStore
 from backend.app.db import models
 from backend.app.db.base import Base
@@ -286,14 +286,17 @@ def run_case(case: dict, rep: int, world: dict, settings: Settings) -> tuple[dic
             expected_model=settings.model if settings.agent == "real" else None,
             deadline=time.monotonic() + settings.timeout_s,
         )
-        session = SessionStore().create(case["customer"])
-        trace: list[dict] = [{"role": "system", "content": SYSTEM_PROMPT}]
+        # Each case is held in its own language (M7.6 D): its prompt and fixed replies.
+        code = case.get("language", "en")
+        session = SessionStore().create(case["customer"], code)
+        system = language(code).system_prompt
+        trace: list[dict] = [{"role": "system", "content": system}]
         tool_calls: list[dict] = []
 
         for turn_number, text in enumerate(case["turns"], start=1):
             before = len(session.messages)
             try:
-                result = run_turn(session, text, llm=llm, db=db, system=SYSTEM_PROMPT)
+                result = run_turn(session, text, llm=llm, db=db, system=system)
             except AssertionError as exc:  # a scripted model ran out of steps
                 raise HarnessError("script_exhausted", str(exc), calls=llm.calls) from exc
             if llm.gave_up:
