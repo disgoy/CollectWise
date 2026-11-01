@@ -37,7 +37,7 @@ def test_the_report_covers_speed_hearing_and_each_turn() -> None:
     assert "4 caller turns in 1 call(s): reply 3, not_understood 1" in report
     assert "to the first audio  <- the headline    median   2550 ms" in report  # replies only: 2200, 2900
     assert "speech time (first audio - first text) median    500 ms" in report  # 700 and 300
-    assert "1 reply had no audio" in report
+    assert "1 reply had no audio (the voice failed, or the caller spoke before it began)" in report
     assert "lowest word                            median 0.73, min 0.20, below 0.6: 2" in report
     assert "add 0.5-1.2 s" in report
     assert report.count("11112222") == 4  # one line per turn, by the call's short id

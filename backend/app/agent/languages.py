@@ -7,7 +7,8 @@ word, plus how to speak.
 Fixed replies promise nothing and state no account facts. A handoff is
 recorded for the team, not a live transfer (M7.3 is deferred), so none says
 "connecting you" or "hold". The Hindi ones are in the agent's voice, Rahul,
-so they speak as a man ("नहीं पाया").
+so they speak as a man ("नहीं पाया"), and are all Devanagari, English words
+too (टीम, कॉल): the Hindi voice spells out Latin letters (D115).
 """
 
 from dataclasses import dataclass, fields
@@ -67,14 +68,17 @@ ENGLISH = Language(
 
 HINDI_SECTION = """
 Language:
-- The customer chose Hindi. Reply in Hindi the way they speak it: Hindi words \
-in Devanagari script, and the English words they use (account, payment, \
-savings, balance) in Latin letters.
+- The customer chose Hindi. Reply in Hindi the way they speak it, written \
+entirely in Devanagari script: also the English words they use, as Hindi \
+speakers write them (टीम, कन्फ़र्म, पेमेंट, अकाउंट, सेविंग्स, करंट, बैलेंस, \
+रिक्वेस्ट). Your replies are read aloud by a Hindi voice that spells out \
+anything in Latin letters one letter at a time.
 - You speak as a man (for example "मैं कर सकता हूँ", "मैं समझ नहीं पाया").
 - Write every amount in digits with its currency, never in words: for example \
-"2,000.00 रुपये" for INR, or "120.00 US dollars".
-- Call accounts by their labels from tool results, as written there.
-- If the customer switches to English, you may reply in English.
+"2,000.00 रुपये" for INR, or "120.00 अमेरिकी डॉलर" for USD.
+- Call accounts by their labels from tool results, in Devanagari (savings: \
+सेविंग्स, current: करंट, main: मेन).
+- Keep replying in Hindi even if the customer uses English.
 - Every rule above applies unchanged in any language.
 """
 
@@ -84,17 +88,17 @@ HINDI = Language(
     replies=Replies(
         cannot_help="माफ़ कीजिए, मैं यहाँ इसमें मदद नहीं कर सकता। क्या मैं आपकी किसी और चीज़ में मदद कर सकता हूँ?",
         unavailable="माफ़ कीजिए, अभी मुझे कुछ दिक्कत हो रही है। कृपया थोड़ी देर में फिर कोशिश कीजिए।",
-        stuck="माफ़ कीजिए, मैं यह पूरा नहीं कर पाया। मैंने आपकी बातचीत हमारी team के एक सदस्य को भेज दी है।",
+        stuck="माफ़ कीजिए, मैं यह पूरा नहीं कर पाया। मैंने आपकी बातचीत हमारी टीम के एक सदस्य को भेज दी है।",
         empty="माफ़ कीजिए, क्या आप यह फिर से बोल सकते हैं?",
-        handed_off="आपकी बातचीत हमारी team के एक सदस्य को भेज दी गई है।",
-        turn_limit="हमने इस call में काफ़ी बातें कर ली हैं, इसलिए मैंने आपकी बातचीत हमारी team के एक सदस्य को भेज दी है।",
+        handed_off="आपकी बातचीत हमारी टीम के एक सदस्य को भेज दी गई है।",
+        turn_limit="हमने इस कॉल में काफ़ी बातें कर ली हैं, इसलिए मैंने आपकी बातचीत हमारी टीम के एक सदस्य को भेज दी है।",
         not_understood="माफ़ कीजिए, मैं ठीक से सुन नहीं पाया। क्या आप फिर से बोल सकते हैं?",
         too_long="माफ़ कीजिए, यह एक साथ बहुत ज़्यादा था। क्या आप थोड़ा छोटा करके बता सकते हैं?",
         cant_hear="माफ़ कीजिए, अभी मुझे सुनने में दिक्कत हो रही है। कृपया थोड़ी देर में फिर कोशिश कीजिए।",
-        goodbye_cant_hear="माफ़ कीजिए, मुझे आपको सुनने में दिक्कत हो रही है, इसलिए मुझे यह call खत्म करनी होगी। "
+        goodbye_cant_hear="माफ़ कीजिए, मुझे आपको सुनने में दिक्कत हो रही है, इसलिए मुझे यह कॉल खत्म करनी होगी। "
                           "कृपया बाद में फिर कोशिश कीजिए।",
-        time_limit="इस call का समय पूरा हो गया है, इसलिए मैं इसे यहीं खत्म कर रहा हूँ। Call करने के लिए धन्यवाद।",
-        silence="काफ़ी देर से मुझे कुछ सुनाई नहीं दिया, इसलिए मैं यह call खत्म कर रहा हूँ। आप कभी भी फिर से call कर सकते हैं।",
+        time_limit="इस कॉल का समय पूरा हो गया है, इसलिए मैं इसे यहीं खत्म कर रहा हूँ। कॉल करने के लिए धन्यवाद।",
+        silence="काफ़ी देर से मुझे कुछ सुनाई नहीं दिया, इसलिए मैं यह कॉल खत्म कर रहा हूँ। आप कभी भी फिर से कॉल कर सकते हैं।",
         slow_down="माफ़ कीजिए, मुझे एक पल चाहिए। कृपया कुछ सेकंड बाद फिर से बोलिए।",
     ),
 )

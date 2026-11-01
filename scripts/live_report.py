@@ -79,7 +79,8 @@ def summarize(rows: list[LiveTurnMetricRecord], events: Sequence[ConversationEve
     lines.append(_spread("whole agent turn", [r.agent_ms for r in replies if r.agent_ms is not None]))
     no_audio = sum(not r.audio_ok for r in replies)
     if no_audio:
-        lines.append(f"  {no_audio} repl{'y' if no_audio == 1 else 'ies'} had no audio (the voice failed: text only)")
+        lines.append(f"  {no_audio} repl{'y' if no_audio == 1 else 'ies'} had no audio "
+                     "(the voice failed, or the caller spoke before it began)")
 
     if events:
         lines.append("\nPer stage (from the conversation events of these turns):")

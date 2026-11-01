@@ -71,8 +71,31 @@ def test_no_fixed_reply_promises_a_transfer() -> None:
     for name in REPLY_NAMES:
         assert not re.search(r"connect|hold", getattr(ENGLISH.replies, name), re.IGNORECASE), name
         assert not re.search(r"जोड़|होल्ड|रुकिए", getattr(HINDI.replies, name)), name
-    for replies in (ENGLISH.replies, HINDI.replies):
-        assert "team" in replies.handed_off and "team" in replies.stuck and "team" in replies.turn_limit
+    for replies, team in ((ENGLISH.replies, "team"), (HINDI.replies, "टीम")):
+        assert team in replies.handed_off and team in replies.stuck and team in replies.turn_limit
+
+
+def test_no_hindi_fixed_reply_has_latin_letters() -> None:
+    # The Hindi voice spells out Latin letters one by one (D115): "team" came out T-E-A-M.
+    for name in REPLY_NAMES:
+        assert not re.search(r"[A-Za-z]", getattr(HINDI.replies, name)), name
+
+
+def test_the_hindi_prompt_asks_for_devanagari_only() -> None:
+    section = HINDI.system_prompt[len(SYSTEM_PROMPT):]
+    assert "entirely in Devanagari" in section and "spells out" in section
+    for word in ("टीम", "कन्फ़र्म", "पेमेंट", "अकाउंट", "सेविंग्स", "करंट", "बैलेंस"):
+        assert word in section
+    assert "120.00 अमेरिकी डॉलर" in section and "US dollars" not in section
+    assert "Keep replying in Hindi" in section and "reply in English" not in section
+
+
+def test_every_payment_goes_through_the_policy_in_both_languages() -> None:
+    # D115: the model refused "डेढ़ लाख" itself, from balances it knew.
+    rule = "For every payment the customer asks for, call propose_payment and let its"
+    assert rule in SYSTEM_PROMPT and rule in HINDI.system_prompt
+    assert "never refuse or accept a payment yourself" in SYSTEM_PROMPT
+    assert "ask first" in SYSTEM_PROMPT
 
 
 def test_an_unknown_language_is_refused() -> None:
