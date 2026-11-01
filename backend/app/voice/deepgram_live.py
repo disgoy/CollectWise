@@ -103,11 +103,15 @@ class DeepgramLiveSTT:
         model: str,
         eot_threshold: float,
         eot_timeout_ms: int,
+        language_hints: Sequence[str] = (),
     ) -> None:
         self._client = client
         self._model = model
         self._eot_threshold = eot_threshold
         self._eot_timeout_ms = eot_timeout_ms
+        # Languages to expect, e.g. ("hi", "en") for Hinglish (M7.6). Only the
+        # multilingual model takes them (flux-general-en refuses with a 400).
+        self._language_hints = tuple(language_hints)
 
     @asynccontextmanager
     async def open(self, *, sample_rate: int, keyterms: Sequence[str] = (),
@@ -126,6 +130,7 @@ class DeepgramLiveSTT:
                     numerals="true",
                     mip_opt_out="true",
                     **({"keyterm": list(keyterms)} if keyterms else {}),
+                    **({"language_hint": list(self._language_hints)} if self._language_hints else {}),
                 ),
                 "live speech-to-text",
             )

@@ -4,43 +4,57 @@
 The yes/no/unsure and handoff checks are deliberately simple word lists. They
 only judge whether speech-to-text kept the caller's meaning; the agent itself
 interprets the words with the model.
+
+Hindi and Hinglish (M7.6) are read too, in Devanagari or Latin letters:
+amounts in Hindi number words ("do hazaar", "डेढ़ लाख") and the Hindi words
+for yes, no, unsure, the account names and a person (hindi_text).
 """
 
-import re
 import statistics
 from decimal import Decimal
 
-_NUMBER = re.compile(r"\d[\d,]*(?:\.\d+)?")
-_WORD = re.compile(r"[a-z']+")
+from evals.voice_checks.hindi_text import amounts, normalize, words
 
-UNSURE = {"maybe", "unsure", "hmm", "perhaps"}
-NO = {"no", "nope", "cancel", "don't", "stop"}
-YES = {"yes", "yeah", "yep", "sure", "okay", "ok", "ahead"}
-HANDOFF = {"person", "human", "someone", "agent", "representative"}
+
+def _words(spellings: str) -> set[str]:
+    return {normalize(word) for word in spellings.split()}
+
+
+UNSURE = _words("maybe unsure hmm perhaps shayad शायद")
+UNSURE_PHRASES = ("not sure", "pata nahi", "pata nahin", normalize("पता नहीं"))
+NO = _words("no nope cancel don't stop nahi nahin mat rehne नहीं नही मत रहने")
+YES = _words("yes yeah yep sure okay ok ahead haan han haanji hanji ji theek thik हां हा जी ठीक")
+HANDOFF = _words("person human someone agent representative insaan insan aadmi vyakti "
+                 "इंसान आदमी व्यक्ति एजेंट पर्सन")
+# Romanized "main" also means "I" in Hinglish: the Hindi phrases don't use it.
+LABELS = {label: _words(spellings) for label, spellings in {
+    "main": "main मेन", "savings": "savings सेविंग्स", "current": "current करंट करेंट",
+}.items()}
 
 THRESHOLDS = (0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9)
 
 
 def amounts_in(text: str) -> list[Decimal]:
-    return [Decimal(match.replace(",", "")) for match in _NUMBER.findall(text)]
+    return amounts(text)
 
 
 def classify_confirmation(text: str) -> str:
-    lowered = text.lower()
-    words = set(_WORD.findall(lowered))
-    # "not sure" contains "sure", so doubt wins over agreement.
-    if words & UNSURE or "not sure" in lowered:
+    said = set(words(text))
+    joined = " ".join(words(text))
+    # "not sure" contains "sure" and "pata nahi" contains "nahi", so doubt
+    # wins over agreement and refusal.
+    if said & UNSURE or any(phrase in joined for phrase in UNSURE_PHRASES):
         return "unsure"
-    if words & NO:
+    if said & NO:
         return "no"
-    if words & YES:
+    if said & YES:
         return "yes"
     return "none"
 
 
 def heard_fact(kind: str, text: str) -> str:
     """The fact a transcript conveys, in the phrase file's terms."""
-    words = set(_WORD.findall(text.lower()))
+    said = set(words(text))
     if kind == "amount":
         found = amounts_in(text)
         # Fixed-point text: normalize() alone writes 20 as "2E+1".
@@ -48,9 +62,9 @@ def heard_fact(kind: str, text: str) -> str:
     if kind == "confirm":
         return classify_confirmation(text)
     if kind == "label":
-        return ",".join(sorted(words & {"main", "savings", "current"})) or "none"
+        return ",".join(sorted(label for label, spellings in LABELS.items() if said & spellings)) or "none"
     if kind == "handoff":
-        return "handoff" if words & HANDOFF else "none"
+        return "handoff" if said & HANDOFF else "none"
     raise ValueError(f"unknown kind {kind}")
 
 

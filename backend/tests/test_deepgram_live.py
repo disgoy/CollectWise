@@ -185,6 +185,23 @@ def test_flux_is_opened_with_our_settings() -> None:
     assert "keyterm" not in connector.calls[1]
 
 
+def test_language_hints_go_to_flux_only_when_given() -> None:
+    connector = FakeConnector([FakeFluxSocket([]), FakeFluxSocket([])])
+    multi = DeepgramLiveSTT(client(listen=connector), model="flux-general-multi", eot_threshold=0.7,
+                            eot_timeout_ms=5000, language_hints=("hi", "en"))
+
+    async def go():
+        async with multi.open(sample_rate=16_000):
+            pass
+        async with stt(connector).open(sample_rate=16_000):
+            pass
+
+    run(go())
+
+    assert (connector.calls[0]["model"], connector.calls[0]["language_hint"]) == ("flux-general-multi", ["hi", "en"])
+    assert "language_hint" not in connector.calls[1]
+
+
 def test_a_phone_call_opens_flux_for_mulaw_at_8_khz() -> None:
     connector = FakeConnector([FakeFluxSocket([])])
 

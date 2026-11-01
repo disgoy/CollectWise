@@ -1,0 +1,21 @@
+{
+  "note": "Hinglish phrases (M7.6). text: what the synthetic Hindi voices say (Devanagari with English words, as people mix them); say: the same in Latin letters, for reading aloud when you record; written: how a perfect transcript could write it, where it differs. expect: the fact that must survive, scored as in phrases.json.",
+  "phrases": [
+    {"id": "hi_amount_do_hazaar", "kind": "amount", "text": "मेरे savings account से दो हज़ार रुपये pay कर दो।", "say": "Mere savings account se do hazaar rupaye pay kar do.", "expect": "2000"},
+    {"id": "hi_amount_dedh_sau", "kind": "amount", "text": "डेढ़ सौ रुपये pay करने हैं।", "say": "Dedh sau rupaye pay karne hain.", "expect": "150"},
+    {"id": "hi_amount_saadhe_teen_sau", "kind": "amount", "text": "साढ़े तीन सौ रुपये भेज दो।", "say": "Saadhe teen sau rupaye bhej do.", "expect": "350"},
+    {"id": "hi_amount_dhai_hazaar", "kind": "amount", "text": "ढाई हज़ार का payment कर दीजिए।", "say": "Dhai hazaar ka payment kar dijiye.", "expect": "2500"},
+    {"id": "hi_amount_paanch_sau_pachaas", "kind": "amount", "text": "पाँच सौ पचास रुपये current account से।", "say": "Paanch sau pachaas rupaye current account se.", "expect": "550"},
+    {"id": "hi_amount_dedh_lakh", "kind": "amount", "text": "मुझे डेढ़ लाख रुपये pay करने हैं।", "say": "Mujhe dedh lakh rupaye pay karne hain.", "expect": "150000"},
+    {"id": "hi_amount_english_number", "kind": "amount", "text": "Two thousand five hundred rupees pay कर दो।", "say": "Two thousand five hundred rupees pay kar do.", "written": "2,500 rupees pay कर दो।", "expect": "2500"},
+    {"id": "hi_confirm_haan", "kind": "confirm", "text": "हाँ, कर दो।", "say": "Haan, kar do.", "expect": "yes"},
+    {"id": "hi_confirm_haan_ji", "kind": "confirm", "text": "हाँ जी, ठीक है।", "say": "Haan ji, theek hai.", "expect": "yes"},
+    {"id": "hi_confirm_nahi", "kind": "confirm", "text": "नहीं।", "say": "Nahi.", "expect": "no"},
+    {"id": "hi_confirm_rehne_do", "kind": "confirm", "text": "नहीं, रहने दो, cancel कर दो।", "say": "Nahi, rehne do, cancel kar do.", "expect": "no"},
+    {"id": "hi_confirm_pata_nahi", "kind": "confirm", "text": "पता नहीं, शायद।", "say": "Pata nahi, shayad.", "expect": "unsure"},
+    {"id": "hi_label_savings", "kind": "label", "text": "Savings वाले account से करो।", "say": "Savings wale account se karo.", "expect": "savings"},
+    {"id": "hi_label_current", "kind": "label", "text": "Current account से कर दो।", "say": "Current account se kar do.", "expect": "current"},
+    {"id": "hi_handoff_insaan", "kind": "handoff", "text": "मुझे किसी इंसान से बात करनी है।", "say": "Mujhe kisi insaan se baat karni hai.", "expect": "handoff"},
+    {"id": "hi_handoff_agent", "kind": "handoff", "text": "किसी agent से बात करवा दो।", "say": "Kisi agent se baat karwa do.", "expect": "handoff"}
+  ]
+}
