@@ -19,6 +19,7 @@ from backend.app.api.live_page import router as live_page_router
 from backend.app.api.live_page import static_files as live_static_files
 from backend.app import config, telemetry
 from backend.app.logging_setup import configure_logging
+from backend.app.voice import live_call
 
 logger = logging.getLogger(__name__)
 
@@ -44,6 +45,7 @@ async def lifespan(app: FastAPI):
             "the demo customers %s. Never use it on a public server.", ", ".join(config.DEMO_CUSTOMERS),
         )
     yield
+    live_call.shutdown_agent_workers()
     telemetry.shutdown()
 
 

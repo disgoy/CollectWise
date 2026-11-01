@@ -11,12 +11,14 @@ Transport-free: the WebSocket endpoint (5.5) supplies the `CallerLink`.
 """
 
 import asyncio
+import contextvars
 import logging
 import re
 import statistics
 import time
 from collections import deque
 from collections.abc import AsyncIterator, Callable, Sequence
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import AsyncExitStack
 from dataclasses import dataclass, field, replace
 from typing import Protocol
@@ -199,6 +201,28 @@ class _Reply:
     first_audio_at: float | None = None
     done: asyncio.Event = field(default_factory=asyncio.Event)
     stop_answer: asyncio.Future | None = None
+
+
+# Live agent turns run on their own threads (M6.5): they spend seconds
+# waiting on the model, and on the loop's default executor (12 workers on an
+# 8-core machine) they queued behind each other from about 12 calls at once,
+# with every quick note and timing write stuck behind them (LOAD_TEST.md).
+_agent_pool: ThreadPoolExecutor | None = None
+
+
+def _agent_workers() -> ThreadPoolExecutor:
+    global _agent_pool
+    if _agent_pool is None:
+        _agent_pool = ThreadPoolExecutor(max_workers=config.LIVE_AGENT_THREADS, thread_name_prefix="live-agent")
+    return _agent_pool
+
+
+def shutdown_agent_workers() -> None:
+    """When the app stops; a later call starts a fresh pool."""
+    global _agent_pool
+    pool, _agent_pool = _agent_pool, None
+    if pool is not None:
+        pool.shutdown(wait=False)
 
 
 _HUNG_UP = object()
@@ -584,7 +608,10 @@ class _LiveCall:
                 db.close()
                 loop.call_soon_threadsafe(pieces.put_nowait, None)
 
-        agent = asyncio.create_task(asyncio.to_thread(work))
+        # A copied context, like asyncio.to_thread, so the turn's spans nest
+        # under this live turn (M6.2).
+        context = contextvars.copy_context()
+        agent = asyncio.ensure_future(loop.run_in_executor(_agent_workers(), context.run, work))
         splitter = SentenceSplitter()
         first_text_at = None
         while (piece := await pieces.get()) is not None:

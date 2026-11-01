@@ -95,5 +95,8 @@ EOT_TIMEOUT_MS = int(os.environ.get("COLLECTWISE_EOT_TIMEOUT_MS", "5000"))
 LIVE_MIN_CONFIDENCE = float(os.environ.get("COLLECTWISE_LIVE_MIN_CONFIDENCE", "0.6"))
 # Live calls end after this long, or after this long without the caller's
 # words (D82): streaming speech-to-text bills by the minute, silences included.
+# Threads for live calls' agent turns (M6.5): about one per call at once;
+# they mostly wait on the model's network replies.
+LIVE_AGENT_THREADS = int(os.environ.get("COLLECTWISE_LIVE_AGENT_THREADS", "64"))
 LIVE_MAX_CALL_MINUTES = float(os.environ.get("COLLECTWISE_LIVE_MAX_CALL_MINUTES", "15"))
 LIVE_SILENCE_MINUTES = float(os.environ.get("COLLECTWISE_LIVE_SILENCE_MINUTES", "2"))

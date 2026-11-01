@@ -244,6 +244,12 @@ def _run_turn(
             telemetry.annotate(tool_span, ok=outcome.ok, error=outcome.error)
             if outcome.error == "internal_error":
                 tool_span.set_status(Status(StatusCode.ERROR))
+        # Services commit their own writes, so what is still open here is a
+        # read transaction. End it, so the connection goes back to the pool
+        # for the model call that follows instead of being held for seconds
+        # (M6.5, LOAD_TEST.md). Rollback, not commit: anything unsaved now
+        # would be a half-done write, which must not be kept.
+        ctx.db.rollback()
         record(
             "tool_call",
             name=name,

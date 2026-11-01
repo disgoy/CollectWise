@@ -242,3 +242,132 @@ def test_a_small_load_test_runs_end_to_end(tmp_path) -> None:
     live = data["levels"][1]
     assert live["server"]["live_first_audio_s"]["n"] == 2
     assert 0 <= live["overhead_s"]["p50"] < 1
+
+
+# --- the fixes the load test led to (M6.5) ---------------------------------------------------
+
+
+class _CountingConnections:
+    """A model call that notes how many database connections are checked out
+    while it runs."""
+
+    def __init__(self, engine, reply) -> None:
+        self.engine, self.reply, self.seen = engine, reply, None
+
+    def create(self, **kwargs):
+        self.seen = self.engine.pool.checkedout()
+        return self.reply
+
+
+@pytest.mark.parametrize("tool", [("t1", "list_accounts", {}),
+                                  ("t1", "get_account_summary", {"account_id": "acct_a_1"})])
+def test_no_connection_is_held_through_the_model_call_after_a_lookup(tool) -> None:
+    from sqlalchemy import select
+    from sqlalchemy.orm import sessionmaker
+
+    from backend.app.db import models
+    from backend.tests.databases import make_test_engine
+    from backend.tests.fake_llm import FakeLLM, say, use
+
+    engine = make_test_engine(concurrent=True)  # a real pool, so checked-out connections count
+    Session = sessionmaker(bind=engine, expire_on_commit=False)
+    with Session() as db:
+        seed_customer(db, "cust_a", [("acct_a_1", "USD", "active")])
+    session = SessionStore().create("cust_a")
+    answer = _CountingConnections(engine, say("Done."))
+
+    with Session() as db:
+        result = run_turn(session, "my balance?", llm=FakeLLM([use(tool), answer]), db=db, system="s")
+
+    assert result.tool_calls[0].ok
+    assert answer.seen == 0  # the lookup's connection went back to the pool
+    with Session() as db:  # what the tool saved (an audited view) still stands
+        views = db.scalars(select(models.ServicingRequestRecord)).all()
+    assert len(views) == (1 if tool[1] == "get_account_summary" else 0)
+    engine.dispose()
+
+
+def test_live_agent_turns_run_on_their_own_pool_and_quick_writes_dont(monkeypatch) -> None:
+    import threading
+
+    from backend.app.voice import live_call
+    from backend.app.voice.live_call import ReplyDone
+    from backend.tests.databases import make_test_engine
+    from backend.tests.fake_llm import FakeLLM, say
+    from backend.tests.test_live_call import Call, run
+
+    threads = {}
+
+    class Noting:
+        def create(self, **kwargs):
+            threads["agent"] = threading.current_thread().name
+            return say("Hello.")
+
+    real_record = live_call.record_live_turn_metric
+
+    def noting_record(db, metric):
+        threads["timing"] = threading.current_thread().name
+        real_record(db, metric)
+
+    monkeypatch.setattr(live_call, "record_live_turn_metric", noting_record)
+    live_call.shutdown_agent_workers()
+    monkeypatch.setattr(config, "LIVE_AGENT_THREADS", 7)
+    engine = make_test_engine()
+    from sqlalchemy.orm import sessionmaker
+
+    factory = sessionmaker(bind=engine, expire_on_commit=False)
+    with factory() as db:
+        seed_customer(db, "cust_a", [("acct_a_1", "USD", "active")])
+    call = Call(factory, FakeLLM([Noting()]))
+
+    async def go():
+        call.start()
+        call.listener.say_turn("Hi")
+        await call.link.wait_for(ReplyDone)
+        await call.end()
+
+    run(go())
+
+    assert threads["agent"].startswith("live-agent")
+    assert not threads["timing"].startswith("live-agent")
+    assert live_call._agent_workers()._max_workers == 7
+    live_call.shutdown_agent_workers()
+    assert live_call._agent_pool is None
+    engine.dispose()
+
+
+def test_the_app_stops_the_live_agent_pool_and_ships_64_threads() -> None:
+    from backend.app.voice import live_call
+
+    live_call._agent_workers()
+    with TestClient(app):
+        pass
+
+    assert live_call._agent_pool is None
+    assert config.LIVE_AGENT_THREADS == 64
+
+
+def test_a_write_a_tool_left_unsaved_is_dropped_not_saved(monkeypatch, db_session) -> None:
+    # Every service commits its own writes; one that didn't would be a bug,
+    # and its half-done work must not be saved by whatever commits next.
+    from backend.app.db import models
+    from backend.app.tools import accounts
+    from backend.tests.fake_llm import FakeLLM, say, use
+
+    seed_customer(db_session, "cust_a", [("acct_a_1", "USD", "active")])
+    real = accounts.list_customer_accounts
+
+    def half_done(db, customer_id):
+        db.add(models.CustomerRecord(customer_id="cust_half_done", display_name="Never saved"))
+        db.flush()
+        return real(db, customer_id)
+
+    monkeypatch.setattr(accounts, "list_customer_accounts", half_done)
+    session = SessionStore().create("cust_a")
+
+    run_turn(session, "my accounts?", llm=FakeLLM([use(("t1", "list_accounts", {})), say("Done.")]),
+             db=db_session, system="s")
+
+    db_session.expire_all()
+    assert db_session.get(models.CustomerRecord, "cust_half_done") is None
+    assert db_session.get(models.CustomerRecord, "cust_a") is not None

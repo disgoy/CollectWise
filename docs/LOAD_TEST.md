@@ -12,7 +12,7 @@ Free to run: no real model or speech service is called.
 inside our server. "Tool p95" is the server's own timing of tool calls, where
 waiting for a database connection shows up.
 
-## Results
+## Results before the fixes
 
 ### Typed conversations
 
@@ -62,17 +62,33 @@ not the database.
 Not seen at these loads: SQLite write-lock errors, the 30 s pool wait
 running out, event-loop slowdown.
 
-## What would fix it (each its own step, re-measured)
+## The fixes, and the results after them
 
-- **Release the connection after each tool** (end the read transaction once
-  the tool returns), so a turn holds a connection for ~10 ms instead of
-  seconds. Expected: (1) disappears until well beyond 80 callers.
-- **A dedicated, sized worker pool for live turns** (a setting, e.g. 64
-  threads; the threads mostly wait on the network), and timing/note writes
-  kept off it. Expected: (2) moves out to that size.
-- **Thread and pool sizes as settings**, sized together: typed-request
-  threads, live-turn threads and database connections. Postgres's own
-  connection limit (100 by default) caps the total across processes.
+Two fixes, made and measured the same day:
+
+- **The connection goes back after each tool.** Services commit their own
+  writes, so after a tool returns only a read transaction is open; the agent
+  loop now ends it (a rollback, so a write left unsaved by mistake is
+  dropped, never saved half-done). A turn holds a connection for about
+  10 ms instead of through its model calls.
+- **Live agent turns have their own pool** of `COLLECTWISE_LIVE_AGENT_THREADS`
+  threads (64), and the quick note and timing writes stay on the default
+  executor, no longer behind slow turns. Tracing context is carried across.
+
+| At once | Typed overhead p95, before → after (SQLite / Postgres) | Tool p95 after | Live overhead p95, before → after (SQLite / Postgres) |
+|---|---|---|---|
+| 10 | 0.06 → 0.07 s / 0.06 → 0.07 s | 0.01 s | 0.04 → 0.06 s / 0.05 → 0.06 s |
+| 20 | **1.09 → 0.12 s / 1.15 → 0.07 s** | 0.00–0.02 s | **2.73 → 0.23 s / 2.76 → 0.16 s** |
+| 40 | **2.14 → 0.14 s / 2.24 → 0.16 s** | 0.01–0.03 s | **5.44 → 0.06 s / 5.49 → 0.09 s** |
+| 80 (typed) | 3.92 → 2.88 s / 5.64 → 5.62 s | 0.01–0.02 s | — |
+
+Still no errors at any level. One process now takes **40 typed conversations
+and 40 live calls at once with no meaningful wait** (live up to the 64-thread
+pool). What remains at 80 typed conversations is the third limit: FastAPI's
+40 threads for typed requests, so half the turns wait for a whole turn
+(overhead p50 ~2.7–2.8 s). Next if wanted: that thread count and the
+database pool size as settings, sized together (Postgres allows 100
+connections by default, shared across processes).
 
 ## Beyond one process
 
