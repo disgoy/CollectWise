@@ -26,6 +26,36 @@ class CustomerRecord(Base):
         String(100),
         nullable=False,
     )
+    # The number the customer calls from, in E.164 (M7.2). Caller ID can be
+    # spoofed, so it only ever narrows a phone caller down to one customer;
+    # the phone PIN decides.
+    phone_number: Mapped[str | None] = mapped_column(
+        String(16),
+        nullable=True,
+        unique=True,
+    )
+
+
+class PhoneCredentialRecord(Base):
+    """A customer's phone PIN (M7.2): only its scrypt hash and salt, kept apart
+    from the profile and never returned by any route."""
+
+    __tablename__ = "phone_credentials"
+
+    customer_id: Mapped[str] = mapped_column(
+        String(50),
+        ForeignKey("customers.customer_id"),
+        primary_key=True,
+    )
+    pin_hash: Mapped[str] = mapped_column(String(128), nullable=False)
+    pin_salt: Mapped[str] = mapped_column(String(64), nullable=False)
+    # Wrong PINs in a row, across calls; reset by a right one.
+    failed_attempts: Mapped[int] = mapped_column(nullable=False, default=0)
+    locked_until: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
+
+    __table_args__ = (
+        CheckConstraint("failed_attempts >= 0", name="ck_phone_credentials_attempts"),
+    )
 
 
 class AccountRecord(Base):
@@ -210,7 +240,8 @@ class ConversationEventRecord(Base):
     __table_args__ = (
         CheckConstraint(
             "event_type IN ('session_started', 'turn_started', "
-            "'model_call', 'tool_call', 'turn_completed', 'payment_cancelled')",
+            "'model_call', 'tool_call', 'turn_completed', 'payment_cancelled', "
+            "'caller_verified', 'verification_failed')",
             name="ck_conversation_events_type",
         ),
         CheckConstraint(

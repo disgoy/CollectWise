@@ -54,7 +54,8 @@ class SimulatedLiveSTT:
         require_load_test()
 
     @asynccontextmanager
-    async def open(self, *, sample_rate: int, keyterms: Sequence[str] = ()):
+    async def open(self, *, sample_rate: int, keyterms: Sequence[str] = (), encoding: str = "linear16"):
+        # Counts audio as 16-bit samples: load tests stream PCM (M6.5).
         yield _Listener(sample_rate)
 
 
@@ -119,7 +120,7 @@ class SimulatedLiveTTS:
         self._speed = speed
 
     @asynccontextmanager
-    async def open(self):
+    async def open(self, audio=None):
         speaker = _Speaker(self._speed)
         try:
             yield speaker

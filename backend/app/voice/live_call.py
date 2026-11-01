@@ -33,6 +33,7 @@ from backend.app.services.conversation_events import ConversationEvent, record_c
 from backend.app.services.voice_metrics import LiveTurnMetric, record_live_turn_metric
 from backend.app.voice.guard import check_transcript
 from backend.app.voice.live_speech import (
+    AudioFormat,
     HeardEvent,
     LiveSpeaker,
     LiveSpeechToText,
@@ -47,6 +48,7 @@ logger = logging.getLogger(__name__)
 
 # The caller's audio: mono 16-bit PCM at 16 kHz (Flux's recommended rate).
 CALLER_SAMPLE_RATE = 16_000
+BROWSER_AUDIO = AudioFormat("linear16", CALLER_SAMPLE_RATE)
 
 REPLY_GOODBYE_CANT_HEAR = (
     "Sorry, I'm having trouble hearing you, so I'll have to end this call. Please try again later."
@@ -682,23 +684,26 @@ async def run_live_call(
     keyterms: Sequence[str] = (),
     turn_limiter: TurnLimiter | None = None,
     clock: Callable[[], float] = time.monotonic,
+    caller_audio: AudioFormat = BROWSER_AUDIO,
+    reply_audio: AudioFormat | None = None,
 ) -> str:
     """Run one call until the caller hangs up, it is handed off, listening
     fails, or a call limit is reached. Returns the reason, which is also sent
-    as CallEnded. Our own bugs propagate."""
+    as CallEnded. Our own bugs propagate. A phone call passes μ-law formats
+    (M7.1); nothing else in the call depends on them."""
     call = _LiveCall(
         session, link, llm=llm, db_factory=db_factory, system=system, clock=clock, turn_limiter=turn_limiter,
     )
     async with AsyncExitStack() as stack:
         try:
             listener = await stack.enter_async_context(
-                stt.open(sample_rate=CALLER_SAMPLE_RATE, keyterms=keyterms)
+                stt.open(sample_rate=caller_audio.sample_rate, keyterms=keyterms, encoding=caller_audio.encoding)
             )
         except SpeechUnavailableError:
             reason = "listening_unavailable"
         else:
             try:
-                call._speaker = await stack.enter_async_context(tts.open())
+                call._speaker = await stack.enter_async_context(tts.open(reply_audio) if reply_audio else tts.open())
             except SpeechUnavailableError:
                 logger.warning("Live speech unavailable in session %s; text only", session.session_id)
             async with asyncio.TaskGroup() as tasks:

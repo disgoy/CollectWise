@@ -49,7 +49,75 @@ function signedIn(newToken, who) {
   $("signed-in").hidden = false;
   $("signed-in").textContent = `Signed in as ${who}.`;
   $("start").disabled = false;
-  setStatus("Ready. Press Start call and allow the microphone.");
+  setStatus("Ready. Press Start call and allow the microphone, or ring the phone number.");
+  watchPhoneCalls();
+}
+
+// --- watching this account's phone calls (M7.2) ----------------------------
+// A verified phone call's captions and sentences, live; nothing is stored.
+
+let watchSocket = null;
+
+function watchPhoneCalls() {
+  if (watchSocket) watchSocket.close();
+  const scheme = location.protocol === "https:" ? "wss" : "ws";
+  const socket = new WebSocket(`${scheme}://${location.host}/telephony/watch`);
+  watchSocket = socket;
+  let conversation = null;
+  let timeline = null;
+  let clockTimer = null;
+  const started = new Set(); // replies whose first sentence has been shown
+
+  socket.onopen = () => socket.send(JSON.stringify({ type: "start", token }));
+  socket.onmessage = (event) => {
+    const message = JSON.parse(event.data);
+    if (call !== null) return; // a browser call in progress has the screen
+    if (message.type === "phone_call_started") {
+      conversation = new Conversation();
+      timeline = new CallTimeline();
+      lastTimeline = timeline;
+      started.clear();
+      timeline.start();
+      clearInterval(clockTimer);
+      clockTimer = setInterval(() => { $("clock").textContent = formatDuration(timeline.elapsed()); }, 250);
+      $("copy").disabled = true;
+      setStatus("A phone call is in progress on this account. Watching.");
+      return;
+    }
+    if (!timeline) return;
+    switch (message.type) {
+      case "caller_speaking":
+        timeline.callerSpeaking();
+        break;
+      case "caption":
+        $("caption").textContent = message.text;
+        break;
+      case "caller_said":
+        $("caption").textContent = "";
+        conversation.show(timeline.callerSaid(message.text));
+        break;
+      case "agent_sentence":
+        conversation.show(timeline.agentSentence(message.reply, message.text));
+        if (!started.has(message.reply)) {
+          started.add(message.reply); // the caller hears it about now
+          conversation.show(timeline.agentAudioStarts(message.reply, 0));
+        }
+        break;
+      case "stop_playback":
+        conversation.show(timeline.interrupted(message.reply));
+        break;
+      case "call_ended":
+        timeline.end();
+        clearInterval(clockTimer);
+        $("clock").textContent = formatDuration(timeline.elapsed());
+        $("copy").disabled = false;
+        setStatus(`The phone call ended. ${END_REASONS[message.reason] || ""}`.trim());
+        timeline = null;
+        break;
+      default:
+        break;
+    }
+  };
 }
 
 // --- signing in ------------------------------------------------------------

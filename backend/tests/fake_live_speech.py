@@ -72,10 +72,12 @@ class FakeLiveSTT:
     listener: FakeListener = field(default_factory=FakeListener)
     fail_to_open: bool = False
     opened_with: dict | None = None
+    opened_encoding: str | None = None
 
     @asynccontextmanager
-    async def open(self, *, sample_rate: int, keyterms=()):
+    async def open(self, *, sample_rate: int, keyterms=(), encoding: str = "linear16"):
         self.opened_with = {"sample_rate": sample_rate, "keyterms": list(keyterms)}
+        self.opened_encoding = encoding
         if self.fail_to_open:
             raise SpeechUnavailableError("flux_unreachable")
         yield self.listener
@@ -150,11 +152,18 @@ class FakeLiveTTS:
     speaker: FakeSpeaker = field(default_factory=FakeSpeaker)
     fail_to_open: bool = False
     sample_rate: int = FakeSpeaker.sample_rate
+    opened_audio: object = None
+    opens: int = 0
 
     @asynccontextmanager
-    async def open(self):
+    async def open(self, audio=None):
+        self.opened_audio = audio
         if self.fail_to_open:
             raise SpeechUnavailableError("aura_unreachable")
+        # Opened again in one call (a phone call's prompts, then the agent): a
+        # fresh output, like a new Aura socket.
+        self.speaker._output = asyncio.Queue()
+        self.opens += 1
         try:
             yield self.speaker
         finally:

@@ -162,7 +162,7 @@ def old_schema(empty_url):
 
 
 def test_scripts_refuse_an_old_or_unversioned_schema(old_schema, empty_url) -> None:
-    with pytest.raises(SchemaOutOfDate, match="revision 0001; the code needs 0002. Run `alembic upgrade head`"):
+    with pytest.raises(SchemaOutOfDate, match=f"revision 0001; the code needs {head_revision()}. Run `alembic upgrade head`"):
         require_current_schema(old_schema)
     with old_schema.begin() as connection:
         connection.execute(text("DROP TABLE alembic_version"))
@@ -194,7 +194,7 @@ def test_a_server_on_an_old_schema_says_so_and_is_not_ready(old_schema, client, 
     with caplog.at_level(logging.ERROR, logger="backend.app.main"):
         with TestClient(main.app):  # runs startup
             pass
-    assert "Database schema is out of date (0001, need 0002)" in caplog.text
+    assert f"Database schema is out of date (0001, need {head_revision()})" in caplog.text
     assert "alembic upgrade head" in caplog.text
 
 

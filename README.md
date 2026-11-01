@@ -118,6 +118,33 @@ COLLECTWISE_AGENT_LLM=anthropic python -m evals.agent_conversations.run_eval --r
 Results land in `.claude/hillclimb/agent_conversations/baseline/`. The runner
 refuses paid runs until a person approves the harness with `--approve-harness`.
 
+## Phone calls (Twilio)
+
+A Twilio number can reach the same live agent (Milestone 7.1). Point the
+number's voice webhook at `POST {COLLECTWISE_PUBLIC_BASE_URL}/telephony/twilio/voice`;
+the app answers with a media stream to `/telephony/twilio/stream`. Phone audio
+(8 kHz μ-law) goes to Deepgram and back to Twilio unconverted; Twilio's
+playback marks feed the same heard-tracking as the browser, so an interrupted
+read-back is read again. Only Twilio can start a call: every request must be
+signed with your `TWILIO_AUTH_TOKEN`, and a stream must also present a
+one-time pass the webhook issued for that call.
+
+**Who is calling (7.2):** before the agent exists, the call is verified in
+code: the caller's number must belong to a customer **and** they must type
+that customer's 6-digit phone PIN on the keypad. While verifying, nothing the
+caller says is transcribed; the digits are compared and dropped (never
+logged, stored or shown to the model). Every failure sounds the same; 3
+wrong PINs in a row lock the PIN for 15 minutes. Set a customer's number and
+PIN with `PUT /customers/{id}/phone` (admin key), or for the demo customer:
+
+```bash
+python -m scripts.seed_demo --phone +15555550100
+```
+
+**Watching a phone call on screen:** sign in on `/live` as the same customer
+and the page shows the call's captions, clock and timeline while you talk on
+the phone. Only that customer's page sees them; nothing is stored.
+
 ## Operations MCP server
 
 A read-only [MCP](https://modelcontextprotocol.io) server lets an assistant
@@ -150,6 +177,8 @@ in its configuration file.
 | `COLLECTWISE_AGENT_EFFORT` | `medium` | Model effort level |
 | `COLLECTWISE_AGENT_TIMEOUT_S` | `15` | Longest wait for the next piece of a model reply before the caller hears "having trouble" |
 | `COLLECTWISE_AGENT_MAX_RETRIES` | `1` | Retries of a failed model call |
+| `TWILIO_AUTH_TOKEN` | unset (phone calls off) | Checks that phone-call requests really come from Twilio; keep it in `.env` |
+| `COLLECTWISE_PUBLIC_BASE_URL` | unset (phone calls off) | The public https address Twilio calls; signatures are checked against it |
 | `COLLECTWISE_LOAD_TEST` | unset (off) | `1` allows `COLLECTWISE_AGENT_LLM=simulated` and `COLLECTWISE_SPEECH=simulated`, free stand-ins for load tests; never on a real server |
 | `COLLECTWISE_LIVE_AGENT_THREADS` | `64` | Threads for live calls' agent turns: about one per simultaneous call |
 | `COLLECTWISE_LOG_FORMAT` | `text` | `json` writes one JSON object per log line, with the trace id when tracing is on |

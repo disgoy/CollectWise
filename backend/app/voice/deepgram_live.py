@@ -20,7 +20,7 @@ from deepgram.speak.v1.types import SpeakV1Text
 from websockets.exceptions import ConnectionClosed
 
 from backend.app.voice.deepgram import MAX_TTS_CHARS, _is_transient
-from backend.app.voice.live_speech import HeardEvent, SegmentDone, SpokenAudio
+from backend.app.voice.live_speech import AudioFormat, HeardEvent, SegmentDone, SpokenAudio
 from backend.app.voice.speech import SpeechUnavailableError
 
 logger = logging.getLogger(__name__)
@@ -110,13 +110,14 @@ class DeepgramLiveSTT:
         self._eot_timeout_ms = eot_timeout_ms
 
     @asynccontextmanager
-    async def open(self, *, sample_rate: int, keyterms: Sequence[str] = ()) -> AsyncIterator[_FluxListener]:
+    async def open(self, *, sample_rate: int, keyterms: Sequence[str] = (),
+                   encoding: str = "linear16") -> AsyncIterator[_FluxListener]:
         async with AsyncExitStack() as stack:
             socket = await _enter(
                 stack,
                 self._client.listen.v2.connect(
                     model=self._model,
-                    encoding="linear16",
+                    encoding=encoding,
                     sample_rate=sample_rate,
                     eot_threshold=self._eot_threshold,
                     eot_timeout_ms=self._eot_timeout_ms,
@@ -299,17 +300,19 @@ class DeepgramLiveTTS:
         self._voice = voice
         self.sample_rate = sample_rate
 
-    def _connection(self) -> AbstractAsyncContextManager:
-        return self._client.speak.v1.connect(
-            model=self._voice,
-            encoding="linear16",
-            sample_rate=self.sample_rate,
-            mip_opt_out="true",
-        )
-
     @asynccontextmanager
-    async def open(self) -> AsyncIterator[_AuraSpeaker]:
-        speaker = _AuraSpeaker(self._connection, self.sample_rate)
+    async def open(self, audio: AudioFormat | None = None) -> AsyncIterator[_AuraSpeaker]:
+        audio = audio or AudioFormat("linear16", self.sample_rate)
+
+        def connection() -> AbstractAsyncContextManager:
+            return self._client.speak.v1.connect(
+                model=self._voice,
+                encoding=audio.encoding,
+                sample_rate=audio.sample_rate,
+                mip_opt_out="true",
+            )
+
+        speaker = _AuraSpeaker(connection, audio.sample_rate)
         # Opened at the start of the call, so the first reply doesn't wait
         # for the handshake.
         await speaker.connect()

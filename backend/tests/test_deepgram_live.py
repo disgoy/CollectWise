@@ -185,6 +185,18 @@ def test_flux_is_opened_with_our_settings() -> None:
     assert "keyterm" not in connector.calls[1]
 
 
+def test_a_phone_call_opens_flux_for_mulaw_at_8_khz() -> None:
+    connector = FakeConnector([FakeFluxSocket([])])
+
+    async def go():
+        async with stt(connector).open(sample_rate=8_000, encoding="mulaw"):
+            pass
+
+    run(go())
+
+    assert (connector.calls[0]["encoding"], connector.calls[0]["sample_rate"]) == ("mulaw", 8_000)
+
+
 def test_flux_events_become_our_three_kinds() -> None:
     socket = FakeFluxSocket([
         {"type": "Connected", "request_id": "r", "sequence_id": 0},
@@ -303,6 +315,22 @@ def test_the_aura_socket_opens_at_the_start_of_the_call_with_our_settings() -> N
 
     assert connector.calls == [
         {"model": "aura-2-thalia-en", "encoding": "linear16", "sample_rate": 24_000, "mip_opt_out": "true"}
+    ]
+
+
+def test_a_phone_call_has_aura_speak_mulaw_at_8_khz() -> None:
+    from backend.app.voice.live_speech import PHONE_AUDIO
+
+    connector = FakeConnector([FakeAuraSocket()])
+
+    async def go():
+        async with tts(connector).open(PHONE_AUDIO) as speaker:
+            assert speaker.sample_rate == 8_000
+
+    run(go())
+
+    assert connector.calls == [
+        {"model": "aura-2-thalia-en", "encoding": "mulaw", "sample_rate": 8_000, "mip_opt_out": "true"}
     ]
 
 

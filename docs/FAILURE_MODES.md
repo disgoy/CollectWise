@@ -62,6 +62,11 @@ the model is told about them on the next turn (D74).
 | Leaves mid-call, then calls again | A new call works | — | The session is freed only after the last turn finished | `test_leaving_mid_call_frees_the_session_for_a_new_call` |
 | Opens a second call on the same conversation | The second is refused (4409) | — | The first call carries on | `test_one_live_call_per_session` |
 | The call ends normally (handoff, time limit, silence) | The last reply plays to the end, up to 20 s | — | — | node: "only a normal end that the caller didn't cause lets the audio finish", node: "the last reply keeps playing after the call closes, until its final chunk ends" |
+| A phone request not signed by Twilio | Nothing: the webhook answers 403; an unsigned stream gets no WebSocket | — | No conversation created | `test_an_unsigned_or_wrongly_signed_call_is_refused`, `test_an_unsigned_stream_gets_no_websocket` |
+| A phone stream with a pass for another call, forged or reused | The stream is closed (4401) | The reason, never the pass | — | `test_a_stream_needs_our_pass_for_that_call`, `test_passes_expire_are_single_use_and_tied_to_the_call` |
+| A phone caller types a wrong PIN, calls from an unknown or withheld number, or the PIN is locked | The same words every time: \"that didn't match\", then a goodbye after 3 tries | `verification_failed` with a reason code; no digits | No conversation and no agent; 3 wrong PINs in a row lock the PIN for 15 minutes across calls | `test_every_failure_sounds_the_same`, `test_three_wrong_pins_on_the_phone_end_the_call_and_keep_no_digits`, `test_three_wrong_pins_lock_the_pin_across_calls_until_it_expires` |
+| A phone caller doesn't type anything | The prompt again, then a goodbye | `verification_failed` no_entry (not counted towards the lock) | — | `test_not_typing_is_no_entry_and_never_checked` |
+| Interrupts a read-back on the phone | Twilio's audio is cleared; the agent reads it back again | — | Marks returned by the clear count as not heard | `test_a_read_back_cleared_by_an_interruption_cant_be_confirmed_on_the_phone`, `test_marks_before_a_clear_are_played_and_after_it_are_not` |
 | Sends audio faster than real time, or a broken frame | The call is cut off (4400) | Protocol violation logged (no audio) | — | `test_audio_faster_than_real_time_ends_the_call`, `test_a_bad_audio_frame_ends_the_call` |
 
 ## Limits

@@ -18,6 +18,8 @@ from backend.app.api.demo import router as demo_router
 from backend.app.api.evidence_page import router as evidence_page_router
 from backend.app.api.evidence_page import static_files as evidence_static_files
 from backend.app.api.live_page import router as live_page_router
+from backend.app.api.telephony import router as telephony_router
+from backend.app.api.telephony import watch_router as telephony_watch_router
 from backend.app.api.live_page import static_files as live_static_files
 from backend.app import config, telemetry
 from backend.app.logging_setup import configure_logging
@@ -86,6 +88,8 @@ app.include_router(demo_router)
 app.include_router(live_page_router)
 app.mount("/live/static", live_static_files, name="live-static")
 app.include_router(evidence_page_router)
+app.include_router(telephony_router)
+app.include_router(telephony_watch_router)
 app.mount("/evidence/static", evidence_static_files, name="evidence-static")
 
 

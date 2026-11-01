@@ -9,6 +9,7 @@ on a router this file doesn't list would still escape.
 """
 
 import pytest
+from fastapi import APIRouter
 from fastapi.routing import APIRoute, APIWebSocketRoute
 from fastapi.testclient import TestClient
 from sqlalchemy import func, select
@@ -18,14 +19,14 @@ from backend.app.auth.dependencies import ADMIN_KEY_HEADER
 from backend.app.auth.session_tokens import issue_session_token
 from backend.app.db import models
 from backend.app.db.session import get_db
-from backend.app.api import accounts, agent, customers, demo, evidence_page, live, live_page, servicing, voice
+from backend.app.api import accounts, agent, customers, demo, evidence_page, live, live_page, servicing, telephony, voice
 from backend.app.main import app
 
 BACK_OFFICE_PREFIXES = ("/customers", "/accounts", "/servicing")
-ROUTER_MODULES = (accounts, agent, customers, demo, evidence_page, live, live_page, servicing, voice)
+ROUTER_MODULES = (accounts, agent, customers, demo, evidence_page, live, live_page, servicing, telephony, voice)
 # WebSocket routes aren't in the OpenAPI schema, so they are listed here; each
 # signs in by its first message and has its own tests (test_live_api.py, D83).
-WEBSOCKET_ROUTES = {"/agent/sessions/{session_id}/live"}
+WEBSOCKET_ROUTES = {"/agent/sessions/{session_id}/live", "/telephony/twilio/stream", "/telephony/watch"}
 # The only routes anyone may call: liveness and readiness (H5), and demo
 # sign-in, which answers 404 unless switched on (D84; tests in test_demo.py).
 OPEN_ROUTES = {
@@ -33,6 +34,9 @@ OPEN_ROUTES = {
     ("GET", "/demo/customers"), ("POST", "/demo/sign-in"),
     # The evidence page's data: aggregates only, cached (M6.7).
     ("GET", "/evidence/data"),
+    # Twilio's voice webhook: answers only requests Twilio signed (M7.1;
+    # tests in test_telephony.py).
+    ("POST", "/telephony/twilio/voice"),
 }
 # Routes deliberately left out of the schema: the live-call and evidence pages (D84, M6.7).
 HIDDEN_ROUTES = {"/live", "/evidence"}
@@ -42,6 +46,7 @@ ROUTES = [
     ("POST", "/customers", {"customer_id": "cust_new", "display_name": "Synthetic Customer"}),
     ("GET", "/customers/cust_victim", None),
     ("GET", "/customers/cust_victim/accounts", None),
+    ("PUT", "/customers/cust_victim/phone", {"phone_number": "+15555550123", "pin": "482916"}),
     ("POST", "/accounts", {
         "account_id": "acct_new", "customer_id": "cust_victim",
         "balance": "1.00", "currency": "USD", "status": "active",
@@ -100,6 +105,7 @@ def row_counts() -> dict[str, int]:
             for model in (
                 models.CustomerRecord,
                 models.AccountRecord,
+                models.PhoneCredentialRecord,
                 models.ServicingRequestRecord,
                 models.ServicingAuditEvent,
             )
@@ -149,7 +155,7 @@ def test_every_route_refuses_anonymous_callers(anonymous, method, path) -> None:
 
 @pytest.mark.parametrize(("method", "path", "body"), ROUTES, ids=ROUTE_IDS)
 def test_back_office_routes_work_with_the_key(victim, method, path, body) -> None:
-    assert call(victim, method, path, body).status_code in (200, 201)
+    assert call(victim, method, path, body).status_code in (200, 201, 204)
 
 
 @pytest.mark.parametrize(("method", "path", "body"), ROUTES, ids=ROUTE_IDS)
@@ -237,7 +243,9 @@ def test_health_checks_need_no_key(anonymous) -> None:
 
 def test_every_websocket_route_is_known_and_signs_in() -> None:
     # The schema-based inventory above can't see WebSocket routes.
-    routes = [*app.routes, *(r for module in ROUTER_MODULES for r in module.router.routes)]
+    # Every router a module defines, not only `router` (telephony has two).
+    routers = [value for module in ROUTER_MODULES for value in vars(module).values() if isinstance(value, APIRouter)]
+    routes = [*app.routes, *(r for router in routers for r in router.routes)]
     websocket_paths = {r.path for r in routes if isinstance(r, APIWebSocketRoute)}
 
     assert websocket_paths == WEBSOCKET_ROUTES

@@ -60,6 +60,11 @@ AGENT_MAX_RETRIES = int(os.environ.get("COLLECTWISE_AGENT_MAX_RETRIES", "1"))
 # (tests use it; load tests keep 1).
 LOAD_TEST = os.environ.get("COLLECTWISE_LOAD_TEST") == "1"
 SIMULATED_SPEED = float(os.environ.get("COLLECTWISE_SIMULATED_SPEED", "1"))
+# Phone calls through Twilio (M7.1): off unless both are set. The auth token
+# signs Twilio's requests (keep it in .env); the public base URL is the https
+# address Twilio calls, which signatures are computed over.
+TWILIO_AUTH_TOKEN = os.environ.get("TWILIO_AUTH_TOKEN")
+PUBLIC_BASE_URL = os.environ.get("COLLECTWISE_PUBLIC_BASE_URL")
 # Logs (M6.3): "text" (default) or "json", one object per line.
 LOG_FORMAT = os.environ.get("COLLECTWISE_LOG_FORMAT", "text")
 # Conversation events and voice/live timing rows older than this are deleted

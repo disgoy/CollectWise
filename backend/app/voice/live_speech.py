@@ -13,6 +13,18 @@ from typing import Literal, Protocol
 
 
 @dataclass(frozen=True)
+class AudioFormat:
+    """How a call's audio is encoded (M7.1): the browser sends 16-bit PCM, a
+    phone line 8 kHz μ-law, which both Flux and Aura handle directly."""
+
+    encoding: Literal["linear16", "mulaw"]
+    sample_rate: int
+
+
+PHONE_AUDIO = AudioFormat("mulaw", 8_000)
+
+
+@dataclass(frozen=True)
 class HeardEvent:
     """What the listener noticed.
 
@@ -45,10 +57,10 @@ class LiveListener(Protocol):
 
 class LiveSpeechToText(Protocol):
     def open(
-        self, *, sample_rate: int, keyterms: Sequence[str] = ()
+        self, *, sample_rate: int, keyterms: Sequence[str] = (), encoding: str = "linear16"
     ) -> AbstractAsyncContextManager[LiveListener]:
         """One listener for one call. `keyterms` are words to expect, such as
-        the caller's account names."""
+        the caller's account names; `encoding` is "linear16" or "mulaw"."""
         ...
 
 
@@ -93,6 +105,7 @@ class LiveTextToSpeech(Protocol):
     # The rate of the audio its speakers produce.
     sample_rate: int
 
-    def open(self) -> AbstractAsyncContextManager[LiveSpeaker]:
-        """One speaker for one call."""
+    def open(self, audio: AudioFormat | None = None) -> AbstractAsyncContextManager[LiveSpeaker]:
+        """One speaker for one call, speaking in `audio` (default: 16-bit PCM
+        at `sample_rate`)."""
         ...
