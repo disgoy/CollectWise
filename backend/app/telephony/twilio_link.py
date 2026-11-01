@@ -72,6 +72,11 @@ class TwilioLink:
         self.watch = watch
         self._digits: asyncio.Queue = asyncio.Queue()
         self._reader: asyncio.Task | None = None
+        # Marks sent and not yet back: audio Twilio still has to play.
+        self._unplayed_marks: set[str] = set()
+        self._all_played = asyncio.Event()
+        self._all_played.set()
+        self._prompts = 0
 
     # --- from Twilio ---
 
@@ -101,7 +106,11 @@ class TwilioLink:
                     if not self.verifying:  # nothing said before verification is transcribed
                         self._items.put_nowait(audio)
                 elif event == "mark":
-                    parsed = _parse_mark((frame.get("mark") or {}).get("name"))
+                    name = (frame.get("mark") or {}).get("name")
+                    self._unplayed_marks.discard(str(name))  # played, or returned by a clear: either way done
+                    if not self._unplayed_marks:
+                        self._all_played.set()
+                    parsed = _parse_mark(name)
                     if parsed is not None and parsed[0] not in self._cleared:
                         reply, segment = parsed
                         self._played.setdefault(reply, set()).add(segment)
@@ -115,6 +124,7 @@ class TwilioLink:
                 # "connected", "start" (read by the route) and anything newer: ignored
         finally:
             self.ended = True
+            self._all_played.set()  # nothing more will play
             self._items.put_nowait(_END)
             self._digits.put_nowait(None)
 
@@ -137,11 +147,14 @@ class TwilioLink:
             self._digits.get_nowait()
 
     async def incoming(self) -> AsyncIterator[bytes | SegmentPlayed | PlaybackStopped]:
+        # The reader outlives this: after the engine stops listening, `drain`
+        # still needs Twilio's marks. The route calls `stop_reading` at the end.
         self._ensure_reader()
-        try:
-            while (item := await self._items.get()) is not _END:
-                yield item
-        finally:
+        while (item := await self._items.get()) is not _END:
+            yield item
+
+    def stop_reading(self) -> None:
+        if self._reader is not None:
             self._reader.cancel()
 
     # --- to Twilio ---
@@ -157,8 +170,27 @@ class TwilioLink:
                 self.closed = True
 
     async def play(self, audio: bytes) -> None:
-        """Audio outside a call turn: the verification prompts."""
+        """Audio outside a call turn (the verification prompts), with a mark of
+        its own so `drain` can wait for it."""
         await self._send({"event": "media", "media": {"payload": base64.b64encode(audio).decode()}})
+        self._prompts += 1
+        await self._mark(f"prompt:{self._prompts}")
+
+    async def _mark(self, name: str) -> None:
+        self._unplayed_marks.add(name)
+        self._all_played.clear()
+        await self._send({"event": "mark", "mark": {"name": name}})
+
+    async def drain(self, timeout: float) -> bool:
+        """Wait until Twilio has played everything sent (every mark is back),
+        so closing the stream doesn't cut off the last words. False if it gave
+        up after `timeout` seconds."""
+        self._ensure_reader()
+        try:
+            await asyncio.wait_for(self._all_played.wait(), timeout)
+        except TimeoutError:
+            return False
+        return True
 
     async def send(self, event: CallEvent) -> None:
         if not isinstance(event, AgentAudio) and self.watch is not None:
@@ -166,7 +198,7 @@ class TwilioLink:
         if isinstance(event, AgentAudio):
             await self._send({"event": "media", "media": {"payload": base64.b64encode(event.pcm).decode()}})
         elif isinstance(event, SegmentEnd):
-            await self._send({"event": "mark", "mark": {"name": mark_name(event.reply, event.segment)}})
+            await self._mark(mark_name(event.reply, event.segment))
         elif isinstance(event, StopPlayback):
             self._cleared.add(event.reply)
             await self._send({"event": "clear"})

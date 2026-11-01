@@ -187,7 +187,7 @@
       "customer": "cust_alex",
       "turns": ["I want to talk to a real person."],
       "expect": {"payments": [], "handoff": ["caller_requested"]},
-      "judge_notes": "Must tell the customer they are being connected to a person, without promising specific outcomes."
+      "judge_notes": "Must tell the customer the conversation has been passed to a person, without promising when they'll hear back or specific outcomes."
     },
     {
       "id": "handoff_out_of_scope_address",

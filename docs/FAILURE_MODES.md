@@ -22,7 +22,7 @@ the model is told about them on the next turn (D74).
 | Fails on a later turn, after a payment was read back | "Having trouble" | As above | The read-back payment can still be confirmed | `test_a_model_failure_leaves_an_earlier_read_back_alone` |
 | Refuses, or runs out of tokens | "Sorry, I can't help with that here…" | `turn_completed` cannot_help | Nothing changes | `test_unusable_response_gets_a_safe_reply` |
 | Returns no words | "Sorry, could you say that again?" | `turn_completed` empty | Nothing changes | `test_empty_final_answer` |
-| Keeps calling tools without answering | "Sorry, I wasn't able to finish that. I'm connecting you…" | Handoff (unresolved_issue) | Handed off; an unconfirmed payment is cancelled | `test_model_call_limit_hands_off` |
+| Keeps calling tools without answering | "Sorry, I wasn't able to finish that. I've passed your conversation to a member of our team." | Handoff (unresolved_issue) | Handed off; an unconfirmed payment is cancelled | `test_model_call_limit_hands_off` |
 | Our own request is wrong (400, 401 …) | Nothing: the error is raised, never disguised as an outage | Server error log | — | `test_our_mistakes_are_not_disguised_as_outages`, `test_a_bug_in_our_code_is_not_hidden` |
 
 ## Listening (speech-to-text, live)
@@ -66,6 +66,7 @@ the model is told about them on the next turn (D74).
 | A phone stream with a pass for another call, forged or reused | The stream is closed (4401) | The reason, never the pass | — | `test_a_stream_needs_our_pass_for_that_call`, `test_passes_expire_are_single_use_and_tied_to_the_call` |
 | A phone caller types a wrong PIN, calls from an unknown or withheld number, or the PIN is locked | The same words every time: \"that didn't match\", then a goodbye after 3 tries | `verification_failed` with a reason code; no digits | No conversation and no agent; 3 wrong PINs in a row lock the PIN for 15 minutes across calls | `test_every_failure_sounds_the_same`, `test_three_wrong_pins_on_the_phone_end_the_call_and_keep_no_digits`, `test_three_wrong_pins_lock_the_pin_across_calls_until_it_expires` |
 | A phone caller doesn't type anything | The prompt again, then a goodbye | `verification_failed` no_entry (not counted towards the lock) | — | `test_not_typing_is_no_entry_and_never_checked` |
+| A phone call ends (handoff, time limit, failed PIN) while the last words are still playing | The words to the end: the stream closes only once Twilio has played them, at most 15 s | — | — | `test_a_phone_handoff_closes_only_after_its_last_words_played`, `test_drain_waits_until_every_mark_is_back` |
 | Interrupts a read-back on the phone | Twilio's audio is cleared; the agent reads it back again | — | Marks returned by the clear count as not heard | `test_a_read_back_cleared_by_an_interruption_cant_be_confirmed_on_the_phone`, `test_marks_before_a_clear_are_played_and_after_it_are_not` |
 | Sends audio faster than real time, or a broken frame | The call is cut off (4400) | Protocol violation logged (no audio) | — | `test_audio_faster_than_real_time_ends_the_call`, `test_a_bad_audio_frame_ends_the_call` |
 

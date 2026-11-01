@@ -93,15 +93,32 @@ def start_frame(call_sid: str, pass_: str) -> str:
 
 
 def hear_prompts(ws, *prompts: str) -> list[dict]:
-    """Twilio's side: take the prompts' audio (the fake voice: 10 bytes a
-    character) before the caller goes on, as a real caller would."""
-    frames, heard, expected = [], 0, 10 * sum(len(p) for p in prompts)
-    while heard < expected:
+    """Twilio's side: play the prompts (the fake voice: 10 bytes a character)
+    and send back each prompt's mark, before the caller goes on."""
+    frames, heard, marks = [], 0, 0
+    expected = 10 * sum(len(p) for p in prompts)
+    while heard < expected or marks < len(prompts):
         frame = json.loads(ws.receive_text())
         frames.append(frame)
         if frame["event"] == "media":
             heard += len(base64.b64decode(frame["media"]["payload"]))
+        elif frame["event"] == "mark":
+            marks += 1
+            ws.send_text(json.dumps({"event": "mark", "mark": frame["mark"]}))
     return frames
+
+
+def until_agent_mark(ws) -> list[dict]:
+    """Frames up to the agent's first segment mark (prompt marks are played
+    back as Twilio would)."""
+    frames = []
+    while True:
+        frame = json.loads(ws.receive_text())
+        frames.append(frame)
+        if frame["event"] == "mark":
+            if not frame["mark"]["name"].startswith("prompt:"):
+                return frames
+            ws.send_text(json.dumps({"event": "mark", "mark": frame["mark"]}))
 
 
 def type_pin(ws, digits: str) -> None:
@@ -222,12 +239,8 @@ def test_a_whole_phone_call_in_mulaw_both_ways(phone, client) -> None:
         sent_to_twilio += hear_prompts(ws, f"{verification.GREETING} {verification.ASK_PIN}", verification.VERIFIED)
         for _ in range(3):  # the caller speaks once verified; the third frame ends the turn
             ws.send_text(json.dumps({"event": "media", "streamSid": "MZ0001", "media": {"payload": MEDIA}}))
-        while True:
-            frame = json.loads(ws.receive_text())
-            sent_to_twilio.append(frame)
-            if frame["event"] == "mark":
-                ws.send_text(json.dumps({"event": "mark", "streamSid": "MZ0001", "mark": frame["mark"]}))
-                break
+        sent_to_twilio += until_agent_mark(ws)
+        ws.send_text(json.dumps({"event": "mark", "streamSid": "MZ0001", "mark": sent_to_twilio[-1]["mark"]}))
         ws.send_text(json.dumps({"event": "stop", "streamSid": "MZ0001", "stop": {"callSid": "CA0001"}}))
         closed = ws.receive()
 
@@ -403,3 +416,92 @@ def test_a_read_back_cleared_by_an_interruption_cant_be_confirmed_on_the_phone(d
 
     assert payment_records(db_factory) == 0
     assert '"error": "readback_not_heard"' in llm.requests[-1]["messages"][-1]["content"][0]["content"]
+
+
+# --- the last words play out before a phone call ends ------------------------------------
+
+
+def still_open_until(ws, release, wait_s: float = 0.3):
+    """The stream stays open (no close arrives) until `release()` — Twilio
+    saying the last audio has played — and then closes."""
+    from concurrent.futures import ThreadPoolExecutor
+
+    with ThreadPoolExecutor(1) as pool:
+        closing = pool.submit(ws.receive)
+        try:
+            closing.result(timeout=wait_s)
+            raise AssertionError("the stream closed before its last words had played")
+        except TimeoutError:
+            pass
+        release()
+        return closing.result(timeout=5)
+
+
+def test_drain_waits_until_every_mark_is_back() -> None:
+    async def go():
+        socket = FakeTwilioSocket()
+        link = TwilioLink(socket, "MZ1")
+        await link.send(SegmentEnd(0, 0))
+        await link.play(b"\x01")  # a prompt gets a mark of its own
+        waiting = asyncio.create_task(link.drain(5))
+        await asyncio.sleep(0.05)
+        before_any = not waiting.done()
+        socket.twilio("mark", mark={"name": "0:0"})
+        await asyncio.sleep(0.05)
+        after_one = not waiting.done()  # one still to play
+        socket.twilio("mark", mark={"name": "prompt:1"})
+        return before_any, after_one, await waiting, [f["mark"]["name"] for f in socket.sent if f["event"] == "mark"]
+
+    before_any, after_one, drained, marks = asyncio.run(go())
+
+    assert before_any and after_one and drained is True
+    assert marks == ["0:0", "prompt:1"]
+
+
+def test_drain_counts_marks_returned_by_a_clear() -> None:
+    async def go():
+        socket = FakeTwilioSocket()
+        link = TwilioLink(socket, "MZ1")
+        await link.send(SegmentEnd(0, 0))
+        await link.send(StopPlayback(0))
+        socket.twilio("mark", mark={"name": "0:0"})  # returned by the clear: never played, but done
+        return await link.drain(5)
+
+    assert asyncio.run(go()) is True
+
+
+def test_drain_gives_up_at_the_cap_or_when_the_caller_leaves() -> None:
+    async def go():
+        socket = FakeTwilioSocket()
+        link = TwilioLink(socket, "MZ1")
+        await link.send(SegmentEnd(0, 0))
+        capped = await link.drain(0.1)  # the mark never comes back
+        socket.hang_up()
+        return capped, await link.drain(5)
+
+    capped, after_hang_up = asyncio.run(go())
+
+    assert capped is False
+    assert after_hang_up is True  # nothing more will play: no point waiting
+    assert telephony.DRAIN_S == 15.0
+
+
+def test_a_phone_handoff_closes_only_after_its_last_words_played(phone, client) -> None:
+    from backend.tests.fake_llm import use
+
+    phone.llm.script[:] = [use(("t1", "handoff_to_human", {"reason": "caller_requested"})),
+                           say("Your conversation has been passed to a member of our team.")]
+    pass_ = stream_pass(ring(client).text)
+
+    with open_stream(client) as ws:
+        ws.send_text(json.dumps({"event": "connected"}))
+        ws.send_text(start_frame("CA0001", pass_))
+        type_pin(ws, PIN)
+        hear_prompts(ws, f"{verification.GREETING} {verification.ASK_PIN}", verification.VERIFIED)
+        for _ in range(3):
+            ws.send_text(json.dumps({"event": "media", "media": {"payload": MEDIA}}))
+        last = until_agent_mark(ws)[-1]
+        closed = still_open_until(ws, lambda: ws.send_text(json.dumps({"event": "mark", "mark": last["mark"]})))
+
+    assert closed == {"type": "websocket.close", "code": 1000, "reason": ""}
+    assert phone.store and next(iter(phone.store._sessions.values())).state.handoff.reason == "caller_requested"

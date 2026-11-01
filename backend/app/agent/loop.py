@@ -26,16 +26,14 @@ logger = logging.getLogger(__name__)
 MAX_MODEL_CALLS = 6
 
 # Fixed replies for when the model can't give a usable answer. They promise
-# nothing and state no account facts.
+# nothing and state no account facts. A handoff is recorded for the team, not
+# a live transfer (M7.3 is deferred), so none says "connecting you" or "hold".
 REPLY_CANNOT_HELP = "Sorry, I can't help with that here. Is there anything else I can do for you?"
 REPLY_UNAVAILABLE = "Sorry, I'm having trouble right now. Please try again in a moment."
-REPLY_STUCK = "Sorry, I wasn't able to finish that. I'm connecting you with a member of our team."
+REPLY_STUCK = "Sorry, I wasn't able to finish that. I've passed your conversation to a member of our team."
 REPLY_EMPTY = "Sorry, could you say that again?"
-REPLY_HANDED_OFF = "You're being connected to a member of our team. Please hold."
-REPLY_TURN_LIMIT = (
-    "We've covered a lot in this call, so I'm connecting you with a member of our team "
-    "who can help you further. Please hold."
-)
+REPLY_HANDED_OFF = "Your conversation has been passed to a member of our team."
+REPLY_TURN_LIMIT = "We've covered a lot in this call, so I've passed your conversation to a member of our team."
 
 
 # Fixed replies the model should hear about on the next turn (D74). The rest

@@ -53,6 +53,7 @@ watch_router = APIRouter(prefix="/telephony", tags=["Telephony"])
 VOICE_PATH = "/telephony/twilio/voice"
 STREAM_PATH = "/telephony/twilio/stream"
 START_TIMEOUT_S = 10.0
+DRAIN_S = 15.0  # the longest the end of a call waits for its last words to play
 LINE_UNAVAILABLE = "Sorry, this line isn't available right now. Goodbye."
 
 # Stream close codes, as for the browser's live calls (api/live.py).
@@ -178,7 +179,17 @@ async def media_stream(
         return
 
     link = TwilioLink(websocket, str(start.get("streamSid") or details.get("streamSid") or ""), verifying=True)
-    call_ref = f"call_{call_sid}"[:64]
+    try:
+        await _answer(link, websocket, store, llm, stt, tts, db_factory, turn_limiter, caller_number,
+                      f"call_{call_sid}"[:64])
+    finally:
+        link.stop_reading()
+
+
+async def _answer(link: TwilioLink, websocket: WebSocket, store: SessionStore, llm: LLMClient,
+                  stt: LiveSpeechToText, tts: LiveTextToSpeech, db_factory: Callable,
+                  turn_limiter: SlidingWindowLimiter, caller_number: str, call_ref: str) -> None:
+    """Verify the caller, then run the agent on the same stream."""
     customer_id = await _verify(link, tts, db_factory, caller_number, call_ref)
     session = None
     if customer_id is not None:
@@ -201,6 +212,9 @@ async def media_stream(
             session, link, stt=stt, tts=tts, llm=llm, db_factory=db_factory, system=SYSTEM_PROMPT,
             keyterms=keyterms, turn_limiter=turn_limiter, caller_audio=PHONE_AUDIO, reply_audio=PHONE_AUDIO,
         )
+        # The agent's last words (a handoff, a time-limit goodbye) are still in
+        # Twilio's buffer: let them play before the stream, and the call, ends.
+        await link.drain(DRAIN_S)
         if not link.closed:
             await websocket.close(code=CLOSE_MALFORMED if link.violation else CLOSE_NORMAL)
     finally:
@@ -224,15 +238,13 @@ async def _verify(link: TwilioLink, tts: LiveTextToSpeech, db_factory: Callable,
             async def speak(text: str) -> None:
                 await speaker.say(text)
                 await speaker.end_reply()
-                seconds = 0.0
                 async for item in speaker.output():
                     if isinstance(item, SpokenAudio):
-                        seconds += len(item.data) / 8_000
                         await link.play(item.data)
                     elif isinstance(item, SegmentDone):
                         break
                 if text == NOT_VERIFIED:  # let the goodbye play before the stream closes
-                    await asyncio.sleep(min(seconds + 0.5, 15.0))
+                    await link.drain(DRAIN_S)
 
             def check(pin: str):
                 db = db_factory()

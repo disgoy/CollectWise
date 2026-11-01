@@ -507,3 +507,16 @@ def test_the_system_prompt_covers_interruptions() -> None:
 
 def last_caller_message_of(llm: FakeLLM, request: int) -> str:
     return [m for m in llm.requests[request]["messages"] if m["role"] == "user"][-1]["content"]
+
+
+def test_handoff_wording_promises_no_live_connection() -> None:
+    # A handoff is recorded for the team; nobody is put through (M7.3 is
+    # deferred), so nothing says "connecting you" or "please hold".
+    from backend.app.agent import loop
+
+    assert "has been passed to a" in SYSTEM_PROMPT and "member of our team" in SYSTEM_PROMPT
+    assert "connected" not in SYSTEM_PROMPT
+    for reply in (loop.REPLY_STUCK, loop.REPLY_HANDED_OFF, loop.REPLY_TURN_LIMIT):
+        assert "passed your conversation to a member of our team" in reply or "has been passed to a member" in reply
+        assert "connect" not in reply.lower() and "hold" not in reply.lower()
+

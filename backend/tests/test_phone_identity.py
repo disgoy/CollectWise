@@ -35,7 +35,9 @@ from backend.tests.test_telephony import (  # noqa: F401  (phone is a fixture)
     ring,
     start_frame,
     stream_pass,
+    still_open_until,
     type_pin,
+    until_agent_mark,
 )
 
 NOW = datetime(2026, 11, 1, 12, 0, tzinfo=timezone.utc)
@@ -262,8 +264,12 @@ def test_three_wrong_pins_on_the_phone_end_the_call_and_keep_no_digits(phone, cl
         for _ in range(3):
             type_pin(ws, MARKER_PIN)
         hear_prompts(ws, f"{verification.GREETING} {verification.ASK_PIN}", verification.TRY_AGAIN,
-                     verification.TRY_AGAIN, verification.NOT_VERIFIED)
-        closed = ws.receive()
+                     verification.TRY_AGAIN)
+        goodbye = []
+        while not any(f["event"] == "mark" for f in goodbye):  # the goodbye's audio and its mark
+            goodbye.append(json.loads(ws.receive_text()))
+        mark = next(f for f in goodbye if f["event"] == "mark")
+        closed = still_open_until(ws, lambda: ws.send_text(json.dumps({"event": "mark", "mark": mark["mark"]})))
 
     assert closed["code"] == 1000
     assert len(phone.store) == 0  # no conversation, no agent
@@ -285,8 +291,7 @@ def test_after_verification_the_agent_never_sees_the_digits(phone, client) -> No
         hear_prompts(ws, f"{verification.GREETING} {verification.ASK_PIN}", verification.VERIFIED)
         for _ in range(3):
             ws.send_text(json.dumps({"event": "media", "media": {"payload": MEDIA}}))
-        while json.loads(ws.receive_text())["event"] != "mark":
-            pass
+        until_agent_mark(ws)
         ws.send_text(json.dumps({"event": "stop"}))
         ws.receive()
 
@@ -320,8 +325,7 @@ def test_the_account_holders_page_sees_the_phone_call(phone, client) -> None:
         hear_prompts(ws, f"{verification.GREETING} {verification.ASK_PIN}", verification.VERIFIED)
         for _ in range(3):
             ws.send_text(json.dumps({"event": "media", "media": {"payload": MEDIA}}))
-        while json.loads(ws.receive_text())["event"] != "mark":
-            pass
+        until_agent_mark(ws)
         ws.send_text(json.dumps({"event": "stop"}))
         ws.receive()
 
