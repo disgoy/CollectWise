@@ -118,6 +118,26 @@ COLLECTWISE_AGENT_LLM=anthropic python -m evals.agent_conversations.run_eval --r
 Results land in `.claude/hillclimb/agent_conversations/baseline/`. The runner
 refuses paid runs until a person approves the harness with `--approve-harness`.
 
+## Operations MCP server
+
+A read-only [MCP](https://modelcontextprotocol.io) server lets an assistant
+such as Claude Desktop or Claude Code answer questions about the running
+service from its own numbers: live-call speed, recent calls, conversation
+outcomes and errors, eval results and database health, plus the failure,
+data-handling and load-test documents. It runs as its own process over stdio
+(no network port), opens the database read-only, is never loaded by the app
+or offered to the agent, and returns counts, codes, timings and short call
+references only: no customer ids, nothing callers said, no amounts.
+
+To add it to Claude Code (replace the paths with yours):
+
+```bash
+claude mcp add collectwise-ops -e PYTHONPATH=/path/to/collectwise -e COLLECTWISE_DATABASE_URL=sqlite:////path/to/collectwise/collectwise.db -- /path/to/collectwise/.venv/bin/python -m backend.ops.mcp_server
+```
+
+For Claude Desktop, the same command, `args` and `env` go under `mcpServers`
+in its configuration file.
+
 ## Configuration
 
 | Variable | Default | Purpose |
