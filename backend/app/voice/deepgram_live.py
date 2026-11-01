@@ -151,6 +151,8 @@ class DeepgramLiveSTT:
 class _Segment:
     number: int
     sentences: list[int] = field(default_factory=list)
+    # A Flux voice's id for this segment's speech, from SpeechStarted.
+    speech_id: str | None = None
 
 
 _CLOSED = object()
@@ -159,18 +161,27 @@ _CLOSED = object()
 @dataclass(frozen=True)
 class _SpeakProtocol:
     """What differs between the speak sockets: how a sentence is sent, how
-    queued speech is dropped, and the message confirming it was."""
+    queued speech is dropped and the message confirming it was, and which
+    message says a flushed segment's audio has all arrived."""
 
     name: str
     send_sentence: Callable[[Any, str], Any]
     send_interrupt: Callable[[Any], Any]
     interrupted: str
+    done: str
+    # A Flux voice names each speech (SpeechStarted, then SpeechMetadata with
+    # the same id), so a segment completes only on its own speech's message.
+    started: str | None = None
 
 
 AURA = _SpeakProtocol("Aura", lambda socket, text: socket.send_text(SpeakV1Text(text=text)),
-                      lambda socket: socket.send_clear(), "Cleared")
-FLUX_VOICE = _SpeakProtocol("Flux voice", lambda socket, text: socket.send_speak(SpeakV2Speak(text=text)),
-                            lambda socket: socket.send_interrupt(), "SpeechInterrupted")
+                      lambda socket: socket.send_clear(), "Cleared", done="Flushed")
+# /v2/speak (D111, Deepgram's flux-tts docs): Flushed comes before the last
+# audio; SpeechMetadata is "no more audio is coming". It adds no whitespace
+# between Speak messages, so each sentence ends with a space.
+FLUX_VOICE = _SpeakProtocol("Flux voice", lambda socket, text: socket.send_speak(SpeakV2Speak(text=text + " ")),
+                            lambda socket: socket.send_interrupt(), "SpeechInterrupted",
+                            done="SpeechMetadata", started="SpeechStarted")
 
 
 def speak_protocol(voice: str) -> _SpeakProtocol:
@@ -243,9 +254,16 @@ class _Speaker:
                 kind = getattr(message, "type", None)
                 if kind == self._protocol.interrupted:
                     self._discarding = False
-                elif kind == "Flushed":
+                elif kind == self._protocol.started:
+                    # The oldest segment without a speech yet is this one.
+                    waiting = next((s for s in self._open if s.speech_id is None), None)
+                    if waiting is not None and not self._discarding:
+                        waiting.speech_id = message.speech_id
+                elif kind == self._protocol.done:
                     if self._discarding or not self._open:
                         continue
+                    if self._protocol.started is not None and self._open[0].speech_id != message.speech_id:
+                        continue  # another speech's (an interrupted one's): not this segment's end
                     done = self._open.popleft()
                     self._output.put_nowait(SegmentDone(done.number, tuple(done.sentences)))
                 elif kind == "Warning":
@@ -299,17 +317,23 @@ class _Speaker:
                 raise _unavailable("live text-to-speech", exc) from exc
 
     async def clear(self) -> None:
+        speaking = bool(self._open)  # audio may still be on its way
         self._forget_reply()
         if self._socket is None:
             return
         # Everything until the socket confirms belongs to the cleared reply.
-        self._discarding = True
+        # With nothing open there's nothing new to drop, and a Flux voice sends
+        # no confirmation then (D111): only an earlier interruption's wait, if
+        # any, carries on.
+        if speaking:
+            self._discarding = True
         try:
             await self._protocol.send_interrupt(self._socket)
         except ConnectionClosed:
             self._discarding = False  # nothing more will arrive anyway
             return
-        # One wait at a time; a wait outliving its confirmation finds nothing to undo.
+        # One wait at a time (a new one may only lengthen it); a wait with
+        # nothing to drop, or outliving its confirmation, finds nothing to undo.
         if self._interrupt_timer is not None:
             self._interrupt_timer.cancel()
         self._interrupt_timer = asyncio.create_task(self._give_up_waiting())

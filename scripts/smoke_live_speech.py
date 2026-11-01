@@ -27,6 +27,7 @@ import argparse
 import asyncio
 import os
 import statistics
+from collections import Counter
 import sys
 import time
 
@@ -61,6 +62,19 @@ FRAME_BYTES = RATE * 2 * 80 // 1000  # 80 ms of 16-bit mono
 FLUX_PER_MINUTE = 0.0077  # deepgram.com/pricing, checked 2026-10-31
 
 tts_chars = 0
+
+
+def message_order(log: list[tuple[float, str, object]]) -> str:
+    """The message types in order, a run of audio frames as one entry, so one
+    can see where Flushed and the end-of-speech message fall (D111)."""
+    order: list[str] = []
+    for _, kind, size in log:
+        if kind == "audio" and order and order[-1].startswith("audio"):
+            frames, total = order[-1][6:-1].split("/")
+            order[-1] = f"audio({int(frames) + 1}/{int(total) + size})"
+        else:
+            order.append(f"audio(1/{size})" if kind == "audio" else kind)
+    return " -> ".join(order)
 
 
 async def voice_facts(client: AsyncDeepgramClient, voice: str, idle_seconds: int) -> None:
@@ -111,6 +125,7 @@ async def voice_facts(client: AsyncDeepgramClient, voice: str, idle_seconds: int
         audio_times = [t for t, kind, _ in log if kind == "audio"]
         if audio_times:
             print(f"  first audio {audio_times[0] - sent_at[0]:.2f} s after the first flush")
+        print(f"  message order for these flushes: {message_order(log)}")
 
         # 2. Interrupt in the middle of a sentence.
         mark = len(log)
@@ -145,9 +160,9 @@ async def voice_facts(client: AsyncDeepgramClient, voice: str, idle_seconds: int
             for _ in range(25):
                 await speak("हाँ।")
             await asyncio.sleep(6)
-            kinds = [(kind, label) for _, kind, label in log[mark:] if kind not in ("audio", "Flushed")]
-            print(f"  25 quick flushes -> Flushed {sum(k == 'Flushed' for _, k, _ in log[mark:])}, "
-                  f"other messages: {kinds or 'none'}")
+            counts = Counter(kind for _, kind, _ in log[mark:] if kind != "audio")
+            warnings = [label for _, kind, label in log[mark:] if kind in ("Warning", "Error")]
+            print(f"  25 quick flushes -> {dict(counts)}; warnings/errors: {warnings or 'none'}")
 
         # 4. Idle: is the socket closed?
         if idle_seconds:
@@ -190,7 +205,8 @@ async def adapters_end_to_end(client: AsyncDeepgramClient, *, hindi: bool = Fals
                 elif isinstance(item, SegmentDone):
                     break
             clips.append(audio)
-            print(f"  spoke {len(audio) / 2 / RATE:.1f} s, first audio after {first:.2f} s: {phrase!r}")
+            heard = f"first audio after {first:.2f} s" if first is not None else "NO AUDIO"
+            print(f"  spoke {len(audio) / 2 / RATE:.1f} s, {heard}: {phrase!r}")
 
     if not hindi:
         listener_factory = DeepgramLiveSTT(

@@ -21,13 +21,16 @@ from backend.tests.test_deepgram_live import END, FakeAuraSocket, FakeConnector,
 
 
 class FakeFluxVoiceSocket(FakeAuraSocket):
-    """Answers like a Flux voice. Records sentences as "text" and
+    """Answers like a Flux voice, in the order measured (D111): per flush,
+    SpeechStarted, audio, Flushed, the rest of the audio, then SpeechMetadata.
+    Records sentences (without the trailing space we add) as "text" and
     interruptions as "clear", like the Aura fake, so the Aura tests read the
-    same."""
+    same; `raw` keeps the texts as sent."""
 
     def __init__(self, *, stale_audio_after_clear: bool = False, confirms_interrupt: bool = True) -> None:
         super().__init__(stale_audio_after_clear=stale_audio_after_clear)
         self.confirms_interrupt = confirms_interrupt
+        self.raw: list[str] = []
 
     async def __aiter__(self):
         while True:
@@ -45,16 +48,20 @@ class FakeFluxVoiceSocket(FakeAuraSocket):
         raise AssertionError("a Flux voice has no Clear message")
 
     async def send_speak(self, message) -> None:
-        self.sent.append(("text", message.text))
-        self.pending += message.text
+        self.raw.append(message.text)
+        self.sent.append(("text", message.text.rstrip(" ")))
+        self.pending += message.text.rstrip(" ")
 
     async def send_flush(self) -> None:
         self.sent.append(("flush", ""))
         audio = self.pending.encode()
         self.pending = ""
+        speech = f"s{self.flushes}"
+        self.push({"type": "SpeechStarted", "speech_id": speech})
         self.push(audio[: len(audio) // 2])
+        self.push({"type": "Flushed", "speech_id": speech})  # before the last audio
         self.push(audio[len(audio) // 2:])
-        self.push({"type": "Flushed", "speech_id": f"s{self.flushes}"})
+        self.push(metadata(speech))
         self.flushes += 1
 
     async def send_interrupt(self) -> None:
@@ -62,10 +69,15 @@ class FakeFluxVoiceSocket(FakeAuraSocket):
         self.pending = ""
         if self.stale_audio_after_clear:
             self.push(b"stale audio")
-            self.push({"type": "Flushed", "speech_id": "s99"})
+            self.push(metadata("s99"))  # the interrupted speech's own end
         if self.confirms_interrupt:
             self.push({"type": "SpeechInterrupted", "audio_played_ms": 0, "text_spoken": "",
                        "text_remaining": "", "metadata": {}})
+
+
+def metadata(speech: str) -> dict:
+    return {"type": "SpeechMetadata", "speech_id": speech, "audio_duration_ms": 100, "input_character_count": 5,
+            "billable_character_count": 5, "controls_applied": {}}
 
 
 def flux_client(speak) -> SimpleNamespace:
@@ -232,3 +244,108 @@ def test_a_second_interruption_gets_its_own_full_wait(monkeypatch) -> None:
             return still_waiting, speaker._discarding
 
     assert run(go()) == (True, False)
+
+
+# --- the measured order (D111) -----------------------------------------------------------------
+
+
+def test_audio_after_flushed_still_belongs_to_the_reply(caplog) -> None:
+    # The bug the paid check found: Flushed comes before the last audio.
+    socket = FakeFluxVoiceSocket()
+
+    async def go():
+        async with flux_tts(FakeConnector([socket])).open() as speaker:
+            await speaker.say("Hello there.")
+            await speaker.end_reply()
+            return await take_until_done(speaker, 0)
+
+    with caplog.at_level(logging.WARNING):
+        items = run(go())
+
+    assert items == [SpokenAudio(0, b"Hello "), SpokenAudio(0, b"there."), SegmentDone(0, (0,))]
+    assert "no reply waiting" not in caplog.text
+
+
+class LateEndOfAnotherSpeech(FakeFluxVoiceSocket):
+    """After the next speech starts, the interrupted one's SpeechMetadata
+    arrives late."""
+
+    def __init__(self, late: str) -> None:
+        super().__init__()
+        self.late = late
+
+    def push(self, item) -> None:
+        super().push(item)
+        if isinstance(item, dict) and item.get("type") == "SpeechStarted" and item["speech_id"] != "s0" \
+                and self.late:
+            super().push(metadata(self.late))
+            self.late = ""
+
+
+def test_another_speechs_late_end_doesnt_end_this_reply() -> None:
+    socket = LateEndOfAnotherSpeech(late="s0")
+
+    async def go():
+        async with flux_tts(FakeConnector([socket])).open() as speaker:
+            await speaker.say("Interrupted.")
+            await speaker.clear()
+            await asyncio.sleep(0.01)
+            await speaker.say("Next.")
+            await speaker.end_reply()
+            return await take_until_done(speaker, 1)
+
+    items = run(go())
+
+    assert items[-3:] == [SpokenAudio(1, b"Ne"), SpokenAudio(1, b"xt."), SegmentDone(1, (1,))]
+
+
+def test_an_interruption_with_nothing_being_spoken_waits_for_nothing(monkeypatch) -> None:
+    # A Flux voice doesn't confirm it then (D111): waiting would drop the next reply.
+    monkeypatch.setattr(deepgram_live, "INTERRUPT_WAIT_S", 30)
+    socket = FakeFluxVoiceSocket(confirms_interrupt=False)
+
+    async def go():
+        async with flux_tts(FakeConnector([socket])).open() as speaker:
+            await speaker.say("Done already.")
+            await speaker.end_reply()
+            await take_until_done(speaker, 0)  # all its audio has arrived
+            await speaker.clear()  # the caller talks over it while it still plays
+            discarding = speaker._discarding
+            await speaker.say("Next.")
+            await speaker.end_reply()
+            return discarding, await take_until_done(speaker, 1)
+
+    discarding, items = run(go())
+
+    assert discarding is False
+    assert ("clear", "") in socket.sent  # still told, in case anything is queued
+    assert items == [SpokenAudio(1, b"Ne"), SpokenAudio(1, b"xt."), SegmentDone(1, (1,))]
+
+
+def test_each_sentence_ends_with_a_space_for_a_flux_voice() -> None:
+    # It adds no whitespace between Speak messages (Deepgram's docs).
+    socket = FakeFluxVoiceSocket()
+
+    async def go():
+        async with flux_tts(FakeConnector([socket])).open() as speaker:
+            for sentence in ("One.", "Two."):
+                await speaker.say(sentence)
+            await speaker.end_reply()
+
+    run(go())
+
+    assert socket.raw == ["One. ", "Two. "]
+
+
+def test_a_second_interruption_with_nothing_open_keeps_dropping_the_firsts_audio(monkeypatch) -> None:
+    monkeypatch.setattr(deepgram_live, "INTERRUPT_WAIT_S", 30)
+    socket = FakeFluxVoiceSocket(confirms_interrupt=False)
+
+    async def go():
+        async with flux_tts(FakeConnector([socket])).open() as speaker:
+            await speaker.say("Interrupted.")
+            await speaker.clear()  # audio may still be on its way
+            await speaker.clear()  # the caller talks again: nothing open now
+            return speaker._discarding
+
+    assert run(go()) is True
