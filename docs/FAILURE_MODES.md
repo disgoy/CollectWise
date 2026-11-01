@@ -82,3 +82,4 @@ the model is told about them on the next turn (D74).
 | Too many turns in a minute | 429 before the model is called | — | — | `test_the_eleventh_turn_in_a_minute_is_refused_before_the_model` |
 | 30 turns in one conversation | Passed to a person | `turn_completed` turn_limit | An unconfirmed payment is cancelled | `test_the_turn_limit_cancels_a_pending_payment` |
 | A "yes" long after the read-back | The agent says it timed out and offers to set it up again | — | No payment recorded | `test_confirm_three_turns_later_has_expired` |
+| The read-back didn't state the amount in digits (M7.6 C) | The payment is read back again instead of being confirmed | `tool_call` confirm_payment readback_missing | No payment recorded | `test_a_read_back_in_words_cant_be_confirmed`, `test_a_live_read_back_without_the_amount_cant_be_confirmed` |

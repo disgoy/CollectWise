@@ -959,3 +959,26 @@ def test_turns_count_against_the_customers_shared_rate_limit(db_factory) -> None
     assert call.speaker.said == [REPLY_SLOW_DOWN]
     assert call.session.unheard_by_model == [REPLY_SLOW_DOWN]
     assert call.session.state.turn == 0
+
+
+def test_a_live_read_back_without_the_amount_cant_be_confirmed(db_factory) -> None:
+    # M7.6 C: heard in full, but it never said 120.00.
+    llm = FakeLLM([use(PROPOSE), say("I've prepared your payment. Shall I submit it?"),
+                   use(("t2", "confirm_payment", {})), say("Let me read it back again.")])
+    call = Call(db_factory, llm)
+
+    async def go():
+        call.start()
+        call.listener.say_turn("Pay 120 from my account")
+        await call.link.wait_for(ReplyDone)
+        call.link.play_everything()
+        await asyncio.sleep(0.02)
+        call.listener.say_turn("Yes go ahead")
+        await call.link.wait_for(ReplyDone, count=2)
+        await call.end()
+
+    run(go())
+
+    assert payment_records(db_factory) == 0
+    tool_result = llm.requests[-1]["messages"][-1]["content"][0]["content"]
+    assert '"error": "readback_missing"' in tool_result

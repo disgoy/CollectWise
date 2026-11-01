@@ -2,7 +2,7 @@ import json
 import logging
 import time
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any
 
 from sqlalchemy.orm import Session
@@ -12,6 +12,7 @@ from opentelemetry.trace import Span, Status, StatusCode
 from backend.app import config, telemetry
 from backend.app.agent.languages import ENGLISH, language
 from backend.app.agent.llm import LLMClient, LLMUnavailableError
+from backend.app.agent.readback import states_amount
 from backend.app.agent.sessions import ConversationSession
 from backend.app.services.conversation_events import (
     ConversationEvent,
@@ -215,6 +216,16 @@ def _run_turn(
                 state.pending_payment = None
                 record("payment_cancelled", outcome="not_read_back")
                 span.add_event("payment_cancelled", telemetry.attributes(reason="not_read_back"))
+        elif outcome == "reply":
+            # The model's own read-back must state the amount it proposed this
+            # turn, in digits; otherwise confirming fails and it reads it back
+            # again (M7.6 C).
+            pending = state.pending_payment
+            if (pending is not None and not pending.submitted and pending.proposed_turn == state.turn
+                    and not states_amount(reply, pending.amount)):
+                state.pending_payment = replace(pending, readback_stated=False)
+                logger.info("Read-back without the amount in digits in session %s", session.session_id)
+                span.add_event("readback_missing")
         return TurnResult(
             reply=reply,
             handed_off=state.handoff is not None,

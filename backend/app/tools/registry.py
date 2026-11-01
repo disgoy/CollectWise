@@ -81,7 +81,9 @@ _SPECS = [
             "If it fails with payment_expired, tell the caller the request timed out "
             "and offer to set it up again; if they want it, propose it again and read "
             "it back. If it fails with readback_not_heard, the caller interrupted the "
-            "read-back: propose it again so it is read back in full."
+            "read-back: propose it again so it is read back in full. If it fails with "
+            "readback_missing, your read-back didn't state the amount in digits: "
+            "propose it again and read the amount back in digits."
         ),
         args_model=ConfirmPaymentArgs,
         function=confirm_payment,

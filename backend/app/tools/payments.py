@@ -132,6 +132,16 @@ def confirm_payment(ctx: ToolContext, args: ConfirmPaymentArgs) -> ToolResult:
             currency=pending.currency,
         )
 
+    # ...and stated it in digits: the model's read-back is checked (M7.6 C).
+    if not pending.submitted and not pending.readback_stated:
+        ctx.state.pending_payment = None
+        return ToolResult.failure(
+            "readback_missing",
+            account_id=pending.account_id,
+            amount=str(pending.amount),
+            currency=pending.currency,
+        )
+
     # ...and recently, so a late "yes" about something else can't submit a
     # proposal the caller has forgotten (D73). Submitted ones only replay.
     if not pending.submitted and (

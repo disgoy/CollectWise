@@ -418,3 +418,32 @@ def test_a_new_proposal_is_heard_by_default(ctx, clock) -> None:
 
 def test_the_model_is_told_what_to_do_with_an_unheard_read_back() -> None:
     assert "readback_not_heard" in TOOLS["confirm_payment"].description
+
+
+# --- a read-back that didn't state the amount (M7.6 C) ---------------------------------------
+
+
+def test_a_proposal_whose_read_back_didnt_state_the_amount_cant_be_confirmed(ctx, clock) -> None:
+    from dataclasses import replace
+
+    propose(ctx, "120.00")
+    assert ctx.state.pending_payment.readback_stated is True  # by default
+    ctx.state.pending_payment = replace(ctx.state.pending_payment, readback_stated=False)
+    later_turns(ctx, 1)
+
+    assert confirm(ctx) == ToolResult.failure(
+        "readback_missing", account_id="acct_a_1", amount="120.00", currency="USD"
+    )
+    assert payment_records(ctx.db) == []
+    assert ctx.state.pending_payment is None
+
+
+def test_the_model_is_told_what_to_do_when_the_amount_wasnt_read_back() -> None:
+    description = TOOLS["confirm_payment"].description
+    assert "readback_missing" in description and "in digits" in description
+
+
+def test_the_prompt_asks_for_the_amount_in_digits() -> None:
+    from backend.app.agent.prompts import SYSTEM_PROMPT
+
+    assert "read the amount (in digits, for example 120.00)" in SYSTEM_PROMPT

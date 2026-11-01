@@ -35,6 +35,9 @@ class PendingPayment:
     # may not have heard it (live calls, D82). Typed and M4 voice turns
     # never change it.
     readback_heard: bool = True
+    # False when the reply that read it back didn't state the amount in
+    # digits (M7.6 C): the read-back is checked by code, not trusted.
+    readback_stated: bool = True
 
 
 @dataclass(frozen=True)

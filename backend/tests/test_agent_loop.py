@@ -520,3 +520,81 @@ def test_handoff_wording_promises_no_live_connection() -> None:
         assert "passed your conversation to a member of our team" in reply or "has been passed to a member" in reply
         assert "connect" not in reply.lower() and "hold" not in reply.lower()
 
+
+
+# --- the read-back must state the amount (M7.6 C) ---------------------------------------------
+
+# The account holds 500.00 (seed_customer); groupings like 2,000 are in test_readback.
+PROPOSE_200 = ("t1", "propose_payment", {"account_id": "acct_a_1", "amount": "200.00"})
+CONFIRM = ("t2", "confirm_payment", {})
+
+
+@pytest.mark.parametrize("read_back", [
+    "मैं आपके अकाउंट से 200.00 रुपये की रिक्वेस्ट तैयार कर रहा हूँ। कन्फ़र्म करें?",
+    "I've prepared 200.00 US dollars from your main account. Shall I submit it?",
+    "२०० रुपये, ठीक है?",
+])
+def test_a_read_back_with_the_amount_in_digits_can_be_confirmed(session, db_session, read_back) -> None:
+    llm = FakeLLM([use(PROPOSE_200), say(read_back), use(CONFIRM), say("Recorded.")])
+
+    turn(session, db_session, llm, "pay 200")
+    assert session.state.pending_payment.readback_stated is True
+    second = turn(session, db_session, llm, "yes")
+
+    assert second.tool_calls == [ToolCallRecord("confirm_payment", True, None)]
+    assert payment_count(db_session) == 1
+
+
+@pytest.mark.parametrize("read_back", [
+    "मैं आपके अकाउंट से दो सौ रुपये की रिक्वेस्ट तैयार कर रहा हूँ। कन्फ़र्म करें?",  # in words
+    "I've prepared two hundred dollars from your account. Shall I submit it?",
+    "I've prepared 20.00 US dollars from your account. Shall I submit it?",  # the wrong amount
+    "Shall I submit it?",  # no amount at all
+])
+def test_a_read_back_in_words_cant_be_confirmed(session, db_session, read_back) -> None:
+    llm = FakeLLM([use(PROPOSE_200), say(read_back), use(CONFIRM), say("Let me read it back again.")])
+
+    turn(session, db_session, llm, "pay 200")
+    second = turn(session, db_session, llm, "yes")
+
+    assert second.tool_calls == [ToolCallRecord("confirm_payment", False, "readback_missing")]
+    assert payment_count(db_session) == 0
+    assert session.state.pending_payment is None
+    result = json.loads(tool_results(session.messages[-2])[0]["content"])
+    assert result["data"] == {"account_id": "acct_a_1", "amount": "200.00", "currency": "USD"}
+    events = db_session.scalars(select(models.ConversationEventRecord).where(
+        models.ConversationEventRecord.event_type == "tool_call")).all()
+    assert [e.outcome for e in events if e.name == "confirm_payment"] == ["readback_missing"]
+
+
+def test_only_the_proposing_turns_reply_is_judged(session, db_session) -> None:
+    # A later reply without the amount doesn't undo a good read-back, and a
+    # later reply with it doesn't mend a bad one: a new proposal does.
+    good = FakeLLM([use(PROPOSE_200), say("200.00 USD, shall I submit it?"), say("Take your time.")])
+    turn(session, db_session, good, "pay 200")
+    turn(session, db_session, good, "hmm, let me think")
+    assert session.state.pending_payment.readback_stated is True
+
+    other = SessionStore().create("cust_a")
+    bad = FakeLLM([use(PROPOSE_200), say("Shall I submit it?"), say("It's 200.00 USD.")])
+    turn(other, db_session, bad, "pay 200")
+    turn(other, db_session, bad, "how much was it?")
+    assert other.state.pending_payment.readback_stated is False
+
+
+def test_a_second_proposal_in_the_turn_is_the_one_judged(session, db_session) -> None:
+    propose_300 = ("t3", "propose_payment", {"account_id": "acct_a_1", "amount": "300.00"})
+    llm = FakeLLM([use(PROPOSE_200), use(propose_300), say("I've set up 200.00 USD. Shall I submit it?")])
+
+    turn(session, db_session, llm, "pay 200, no make it 300")
+
+    assert session.state.pending_payment.amount == Decimal("300.00")
+    assert session.state.pending_payment.readback_stated is False
+
+
+def test_a_fixed_reply_still_cancels_the_proposal(session, db_session) -> None:
+    llm = FakeLLM([use(PROPOSE_200), LLMUnavailableError("timeout")])
+
+    turn(session, db_session, llm, "pay 200")
+
+    assert session.state.pending_payment is None
