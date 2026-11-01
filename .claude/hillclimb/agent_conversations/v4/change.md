@@ -30,7 +30,7 @@ English words in Latin). 33 cases × 2.
 **Harness changes (need `--approve-harness` once):** the runner starts each case in its
 language; compliance now also fails when a case's `must_call` tool was never called
 (`hi_pay_over_limit` requires `propose_payment`) and when `readback_missing` occurs (a
-rule broken, like confirming early); the judge has a ninth criterion, `language`
+rule broken, like confirming early); the judge has an eighth criterion, `language`
 (Hindi conversations: all Devanagari, amounts in digits; not applicable in English).
 The Hindi verdicts are uncalibrated: read them before trusting them.
 
