@@ -26,8 +26,9 @@ from typing import Protocol
 from sqlalchemy.orm import Session
 
 from backend.app import config, telemetry
+from backend.app.agent.languages import ENGLISH, language
 from backend.app.agent.llm import LLMClient
-from backend.app.agent.loop import REPLY_HANDED_OFF, TurnResult, run_turn
+from backend.app.agent.loop import TurnResult, run_turn
 from backend.app.agent.sessions import ConversationSession
 from backend.app.services.conversation_events import ConversationEvent, record_conversation_events
 from backend.app.services.voice_metrics import LiveTurnMetric, record_live_turn_metric
@@ -50,12 +51,12 @@ logger = logging.getLogger(__name__)
 CALLER_SAMPLE_RATE = 16_000
 BROWSER_AUDIO = AudioFormat("linear16", CALLER_SAMPLE_RATE)
 
-REPLY_GOODBYE_CANT_HEAR = (
-    "Sorry, I'm having trouble hearing you, so I'll have to end this call. Please try again later."
-)
-REPLY_TIME_LIMIT = "We've reached the time limit for this call, so I'll end it here. Thank you for calling."
-REPLY_SILENCE = "I haven't heard anything for a while, so I'll end this call. Please call again any time."
-REPLY_SLOW_DOWN = "Sorry, I need a moment to catch up. Please say that again in a few seconds."
+# The call's own fixed replies are in each language (agent/languages.py);
+# the English ones by name.
+REPLY_GOODBYE_CANT_HEAR = ENGLISH.replies.goodbye_cant_hear
+REPLY_TIME_LIMIT = ENGLISH.replies.time_limit
+REPLY_SILENCE = ENGLISH.replies.silence
+REPLY_SLOW_DOWN = ENGLISH.replies.slow_down
 
 # A reply whose audio hasn't all arrived by then is given up on, so a lost
 # Flushed can't stall the call.
@@ -247,7 +248,7 @@ class _LiveCall:
         *,
         llm: LLMClient,
         db_factory: Callable[[], Session],
-        system: str,
+        system: str | None,
         clock: Callable[[], float],
         turn_limiter: TurnLimiter | None,
     ) -> None:
@@ -255,7 +256,8 @@ class _LiveCall:
         self._link = link
         self._llm = llm
         self._db_factory = db_factory
-        self._system = system
+        self._system = system  # None: the conversation's language's prompt
+        self._fixed = language(session.language).replies  # fixed replies, in the call's language
         self._clock = clock
         self._turn_limiter = turn_limiter
         self._turns: asyncio.Queue = asyncio.Queue()
@@ -506,13 +508,13 @@ class _LiveCall:
             if item is _HUNG_UP:
                 return "caller_hung_up"
             if item is _LISTENING_FAILED:
-                await self._speak_fixed(REPLY_GOODBYE_CANT_HEAR)
+                await self._speak_fixed(self._fixed.goodbye_cant_hear)
                 return "listening_unavailable"
             if item is _TIME_LIMIT:
-                await self._speak_fixed(REPLY_TIME_LIMIT)
+                await self._speak_fixed(self._fixed.time_limit)
                 return "time_limit"
             if item is _SILENCE:
-                await self._speak_fixed(REPLY_SILENCE)
+                await self._speak_fixed(self._fixed.silence)
                 return "silence"
             await self._take_turn(item)
             if self._session.state.handoff is not None:
@@ -559,11 +561,11 @@ class _LiveCall:
             )
 
         if self._session.state.handoff is not None:
-            reply = await self._speak_fixed(REPLY_HANDED_OFF)
+            reply = await self._speak_fixed(self._fixed.handed_off)
             await self._record(metric("already_handed_off", reply, None, None))
             return
 
-        guard = check_transcript(text, mean, min_confidence=config.LIVE_MIN_CONFIDENCE)
+        guard = check_transcript(text, mean, min_confidence=config.LIVE_MIN_CONFIDENCE, replies=self._fixed)
         if guard.reply is not None:
             # Not a caller turn (D24); the model hears about it next turn (D74).
             await asyncio.to_thread(self._with_lock, self._session.note_unheard, guard.reply)
@@ -575,8 +577,8 @@ class _LiveCall:
             # Shared with typed and M4 voice turns (D72); no model call.
             logger.info("Live turn rate-limited in session %s", self._session.session_id)
             telemetry.annotate(self._turn_span, outcome="rate_limited")
-            await asyncio.to_thread(self._with_lock, self._session.note_unheard, REPLY_SLOW_DOWN)
-            await self._speak_fixed(REPLY_SLOW_DOWN)
+            await asyncio.to_thread(self._with_lock, self._session.note_unheard, self._fixed.slow_down)
+            await self._speak_fixed(self._fixed.slow_down)
             return
 
         await self._link.send(CallerSaid(text))
@@ -680,7 +682,7 @@ async def run_live_call(
     tts: LiveTextToSpeech,
     llm: LLMClient,
     db_factory: Callable[[], Session],
-    system: str,
+    system: str | None = None,
     keyterms: Sequence[str] = (),
     turn_limiter: TurnLimiter | None = None,
     clock: Callable[[], float] = time.monotonic,

@@ -19,7 +19,6 @@ from collections.abc import AsyncIterator, Callable
 from fastapi import APIRouter, Depends, WebSocket
 
 from backend.app.agent.llm import LLMClient
-from backend.app.agent.prompts import SYSTEM_PROMPT
 from backend.app.agent.sessions import SessionStore
 from backend.app.api.providers import (
     get_db_factory,
@@ -243,7 +242,7 @@ async def live_call(
             "type": "ready", "sample_rate_in": CALLER_SAMPLE_RATE, "sample_rate_out": tts.sample_rate,
         }))
         await run_live_call(
-            session, link, stt=stt, tts=tts, llm=llm, db_factory=db_factory, system=SYSTEM_PROMPT,
+            session, link, stt=stt, tts=tts, llm=llm, db_factory=db_factory,
             keyterms=keyterms, turn_limiter=turn_limiter,
         )
         if not link._closed:

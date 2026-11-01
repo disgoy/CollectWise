@@ -7,6 +7,7 @@ from typing import Any
 from uuid import uuid4
 
 from backend.app import config
+from backend.app.agent.languages import LanguageCode, language
 from backend.app.tools.base import CallerContext, ConversationState
 
 logger = logging.getLogger(__name__)
@@ -29,6 +30,9 @@ class ConversationSession:
 
     caller: CallerContext
     state: ConversationState = field(default_factory=ConversationState)
+    # Chosen when the conversation starts and fixed for it (M7.6): the system
+    # prompt and fixed replies follow it (agent/languages.py).
+    language: LanguageCode = "en"
     # Append-only (D38): entries are never edited or removed.
     messages: list[dict[str, Any]] = field(default_factory=list)
     # Serialises turns, so two requests can't interleave in one conversation.
@@ -100,11 +104,14 @@ class SessionStore:
         del self._sessions[session.session_id]
         logger.info("Session %s ended: %s", session.session_id, reason)
 
-    def create(self, customer_id: str) -> ConversationSession:
-        """Start a session for an already-authenticated customer.
+    def create(self, customer_id: str, language_code: LanguageCode = "en") -> ConversationSession:
+        """Start a session for an already-authenticated customer, in a
+        language (M7.6).
 
-        Raises SessionStoreFullError if the server is at its limit.
+        Raises SessionStoreFullError if the server is at its limit, and
+        ValueError for a language we don't speak.
         """
+        language(language_code)  # checked before anything is ended or created
         now = self._clock()
         with self._lock:
             for expired in [s for s in self._sessions.values() if self._expired(s, now)]:
@@ -128,6 +135,7 @@ class SessionStore:
                     customer_id=customer_id,
                     session_id=f"sess_{uuid4().hex}",
                 ),
+                language=language_code,
                 last_active=now,
             )
             self._sessions[session.session_id] = session

@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from opentelemetry.trace import Span, Status, StatusCode
 
 from backend.app import config, telemetry
+from backend.app.agent.languages import ENGLISH, language
 from backend.app.agent.llm import LLMClient, LLMUnavailableError
 from backend.app.agent.sessions import ConversationSession
 from backend.app.services.conversation_events import (
@@ -25,15 +26,14 @@ logger = logging.getLogger(__name__)
 # Model calls allowed in one caller turn before we stop and hand off.
 MAX_MODEL_CALLS = 6
 
-# Fixed replies for when the model can't give a usable answer. They promise
-# nothing and state no account facts. A handoff is recorded for the team, not
-# a live transfer (M7.3 is deferred), so none says "connecting you" or "hold".
-REPLY_CANNOT_HELP = "Sorry, I can't help with that here. Is there anything else I can do for you?"
-REPLY_UNAVAILABLE = "Sorry, I'm having trouble right now. Please try again in a moment."
-REPLY_STUCK = "Sorry, I wasn't able to finish that. I've passed your conversation to a member of our team."
-REPLY_EMPTY = "Sorry, could you say that again?"
-REPLY_HANDED_OFF = "Your conversation has been passed to a member of our team."
-REPLY_TURN_LIMIT = "We've covered a lot in this call, so I've passed your conversation to a member of our team."
+# Fixed replies for when the model can't give a usable answer, in each
+# language (agent/languages.py). The English ones by name, for callers and tests.
+REPLY_CANNOT_HELP = ENGLISH.replies.cannot_help
+REPLY_UNAVAILABLE = ENGLISH.replies.unavailable
+REPLY_STUCK = ENGLISH.replies.stuck
+REPLY_EMPTY = ENGLISH.replies.empty
+REPLY_HANDED_OFF = ENGLISH.replies.handed_off
+REPLY_TURN_LIMIT = ENGLISH.replies.turn_limit
 
 
 # Fixed replies the model should hear about on the next turn (D74). The rest
@@ -134,7 +134,7 @@ def run_turn(
     *,
     llm: LLMClient,
     db: Session,
-    system: str,
+    system: str | None = None,
     on_text: Callable[[str], None] | None = None,
     lock_timeout: float | None = None,
 ) -> TurnResult:
@@ -148,6 +148,9 @@ def run_turn(
     Turns in one conversation run one at a time. With `lock_timeout`, a turn
     that can't start within that many seconds raises SessionBusyError instead
     of waiting for the previous one (M6.1); it is not counted.
+
+    The system prompt and fixed replies are the conversation's language's
+    (M7.6); `system` overrides the prompt (the eval harness records it).
     """
     if not session.lock.acquire(timeout=-1 if lock_timeout is None else lock_timeout):
         raise SessionBusyError()
@@ -169,7 +172,9 @@ def run_turn(
 
         try:
             with telemetry.span("agent.turn", session_id=session.session_id) as turn_span:
-                return _run_turn(session, text, llm=llm, db=db, system=system, record=record,
+                return _run_turn(session, text, llm=llm, db=db,
+                                 system=language(session.language).system_prompt if system is None else system,
+                                 record=record,
                                  turn_started=turn_started, on_text=on_text, span=turn_span)
         finally:
             # Written after the turn in a separate commit, so servicing
@@ -192,6 +197,7 @@ def _run_turn(
     span: Span,
 ) -> TurnResult:
     state = session.state
+    replies = language(session.language).replies
     tool_calls: list[ToolCallRecord] = []
     model_calls = 0
 
@@ -218,14 +224,14 @@ def _run_turn(
 
     # After a handoff the agent no longer converses (D33).
     if state.handoff is not None:
-        return finish(REPLY_HANDED_OFF, "already_handed_off")
+        return finish(replies.handed_off, "already_handed_off")
 
     # A long conversation goes to a person, which also bounds its history
     # and cost (D72). Decided before counting the turn or calling the model.
     if state.turn >= config.MAX_CALLER_TURNS:
         hand_off(state, "turn_limit")
         logger.info("Turn limit reached in session %s", session.session_id)
-        return finish(REPLY_TURN_LIMIT, "turn_limit")
+        return finish(replies.turn_limit, "turn_limit")
 
     # The only place a caller turn is counted (D24).
     state.start_caller_turn()
@@ -271,7 +277,7 @@ def _run_turn(
                 span.set_status(Status(StatusCode.ERROR))
                 record("model_call", outcome="unavailable", latency_ms=_elapsed_ms(started))
                 logger.warning("LLM unavailable in session %s", session.session_id)
-                return finish(REPLY_UNAVAILABLE, "unavailable")
+                return finish(replies.unavailable, "unavailable")
             telemetry.annotate(call_span, stop_reason=response.stop_reason, **_token_counts(response))
         record(
             "model_call",
@@ -307,7 +313,7 @@ def _run_turn(
         if response.stop_reason == "end_turn":
             reply = _reply_text(response.content)
             if not reply:
-                return finish(REPLY_EMPTY, "empty")
+                return finish(replies.empty, "empty")
             return finish(reply, "reply")
 
         # Refusal, max_tokens, or tool_use without any tool block.
@@ -316,10 +322,10 @@ def _run_turn(
             response.stop_reason,
             session.session_id,
         )
-        return finish(REPLY_CANNOT_HELP, "cannot_help")
+        return finish(replies.cannot_help, "cannot_help")
 
     # The model kept calling tools without answering: stop and hand off
     # rather than leave the caller stuck.
     logger.warning("Model call limit reached in session %s", session.session_id)
     run_tool("handoff_to_human", {"reason": "unresolved_issue"})
-    return finish(REPLY_STUCK, "stuck")
+    return finish(replies.stuck, "stuck")

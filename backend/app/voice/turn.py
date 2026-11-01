@@ -15,7 +15,8 @@ from sqlalchemy.orm import Session
 
 from backend.app import config, telemetry
 from backend.app.agent.llm import LLMClient
-from backend.app.agent.loop import REPLY_HANDED_OFF, run_turn
+from backend.app.agent.languages import language
+from backend.app.agent.loop import REPLY_HANDED_OFF, run_turn  # noqa: F401  (also imported from here)
 from backend.app.agent.sessions import ConversationSession
 from backend.app.services.voice_metrics import VoiceTurnMetric, record_voice_turn_metric
 from backend.app.voice.audio import AudioClip
@@ -56,16 +57,17 @@ def run_voice_turn(
     tts: TextToSpeech,
     llm: LLMClient,
     db: Session,
-    system: str,
+    system: str | None = None,
 ) -> VoiceTurnResult:
     turn_started = time.perf_counter()
+    replies = language(session.language).replies
     transcript: str | None = None
     confidence: float | None = None
     stt_ms = agent_ms = None
 
     if session.state.handoff is not None:
         # The reply doesn't depend on what was said: don't pay to transcribe.
-        reply, outcome = REPLY_HANDED_OFF, "already_handed_off"
+        reply, outcome = replies.handed_off, "already_handed_off"
     else:
         started = time.perf_counter()
         with telemetry.span("voice.listen", session_id=session.session_id) as listen_span:
@@ -80,11 +82,11 @@ def run_voice_turn(
         stt_ms = _elapsed_ms(started)
 
         if heard is None:
-            reply, outcome = REPLY_CANT_HEAR, "stt_unavailable"
+            reply, outcome = replies.cant_hear, "stt_unavailable"
         else:
             transcript = heard.text.strip()
             confidence = heard.confidence
-            guard = check_transcript(transcript, confidence, min_confidence=config.VOICE_MIN_CONFIDENCE)
+            guard = check_transcript(transcript, confidence, min_confidence=config.VOICE_MIN_CONFIDENCE, replies=replies)
             if guard.reply is not None:
                 # Not a caller turn: the turn counter doesn't move (D24).
                 reply, outcome = guard.reply, guard.outcome

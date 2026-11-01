@@ -10,6 +10,7 @@ amounts in Hindi number words ("do hazaar", "डेढ़ लाख") and the Hi
 for yes, no, unsure, the account names and a person (hindi_text).
 """
 
+import re
 import statistics
 from decimal import Decimal
 
@@ -24,6 +25,13 @@ UNSURE = _words("maybe unsure hmm perhaps shayad शायद")
 UNSURE_PHRASES = ("not sure", "pata nahi", "pata nahin", normalize("पता नहीं"))
 NO = _words("no nope cancel don't stop nahi nahin mat rehne नहीं नही मत रहने")
 YES = _words("yes yeah yep sure okay ok ahead haan han haanji hanji ji theek thik हां हा जी ठीक")
+# "Do it": a yes on its own; "cancel kar do" and "mat kar do" are refusals,
+# which are checked first.
+YES_PHRASES = ("kar do", "kar dijiye", normalize("कर दो"), normalize("कर दीजिए"))
+# "125 dollars and 50 cents" (as Flux writes it) is one amount, 125.50.
+_UNITS_AND_CENTS = re.compile(
+    r"(\d[\d,]*) ?(dollars?|rupees?|rupaye|rupaiye|रुपये|रुपए)(?: (?:and|aur|और))? (\d{1,2}) ?(cents?|paise|पैसे)",
+    re.IGNORECASE)
 HANDOFF = _words("person human someone agent representative insaan insan aadmi vyakti "
                  "इंसान आदमी व्यक्ति एजेंट पर्सन")
 # Romanized "main" also means "I" in Hinglish: the Hindi phrases don't use it.
@@ -35,19 +43,19 @@ THRESHOLDS = (0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9)
 
 
 def amounts_in(text: str) -> list[Decimal]:
-    return amounts(text)
+    return amounts(_UNITS_AND_CENTS.sub(lambda m: f"{m[1]}.{int(m[3]):02d} {m[2]}", text))
 
 
 def classify_confirmation(text: str) -> str:
     said = set(words(text))
-    joined = " ".join(words(text))
+    joined = f" {' '.join(words(text))} "  # spaces around, so phrases match whole words
     # "not sure" contains "sure" and "pata nahi" contains "nahi", so doubt
     # wins over agreement and refusal.
-    if said & UNSURE or any(phrase in joined for phrase in UNSURE_PHRASES):
+    if said & UNSURE or any(f" {phrase} " in joined for phrase in UNSURE_PHRASES):
         return "unsure"
     if said & NO:
         return "no"
-    if said & YES:
+    if said & YES or any(f" {phrase} " in joined for phrase in YES_PHRASES):
         return "yes"
     return "none"
 

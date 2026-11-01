@@ -22,6 +22,9 @@ Usage, from the repo root:
     set -a; source .env; set +a
     COLLECTWISE_SPEECH=deepgram python -m evals.voice_checks.run_hindi_checks \\
         [--recordings evals/voice_checks/recordings] [--recordings-only] [--phrases ID,ID]
+
+Free: score a saved run again after the scorer changes (no Deepgram calls):
+    python -m evals.voice_checks.run_hindi_checks --rescore <out>/results.json
 """
 
 import argparse
@@ -91,6 +94,32 @@ def model_table(rows: list[dict]) -> str:
     return "\n".join(lines)
 
 
+def report(rows: list[dict]) -> str:
+    from evals.voice_checks.scoring import summarize
+
+    parts = [model_table(rows)]
+    for model in MODELS:
+        subset = [r for r in rows if r["model"] == model]
+        if subset:
+            parts.append(f"=== {model} ===\n{summarize(subset)}")
+    return "\n\n".join(parts)
+
+
+def rescore(path: Path) -> int:
+    """The saved transcripts scored by today's scorer: nothing is heard again."""
+    from evals.voice_checks.scoring import heard_fact, is_correct
+
+    rows = json.loads(path.read_text())["rows"]
+    changed = 0
+    for row in rows:
+        correct = is_correct(row["kind"], row["expect"], row["transcript"])
+        changed += correct != row["correct"]
+        row["heard"], row["correct"] = heard_fact(row["kind"], row["transcript"]), correct
+    print(report(rows))
+    print(f"\nRe-scored {len(rows)} hearings from {path}: {changed} changed. Nothing was sent to Deepgram.")
+    return 0
+
+
 def deepgram_synthesize(client) -> Synthesize:
     from backend.app.voice.deepgram import REQUEST_OPTIONS
 
@@ -131,7 +160,10 @@ def main(argv: list[str] | None = None, *, synthesize: Synthesize | None = None,
     parser.add_argument("--no-samples", action="store_true", help="skip the listening samples")
     parser.add_argument("--out", type=Path, help="output folder (default: a new temp folder)")
     parser.add_argument("--pace", type=float, default=2.0, help="times real time to stream at")
+    parser.add_argument("--rescore", type=Path, help="score a saved results.json again (free, no Deepgram)")
     args = parser.parse_args(argv)
+    if args.rescore:
+        return rescore(args.rescore)
     if args.recordings_only and not args.recordings:
         print("--recordings-only needs --recordings.", file=sys.stderr)
         return 1
@@ -148,7 +180,7 @@ def main(argv: list[str] | None = None, *, synthesize: Synthesize | None = None,
     from backend.app.voice.speech import SpeechUnavailableError
     from evals.voice_checks.live_hearing import LEAD_SILENCE_S, TRAIL_SILENCE_S, hear_live
     from evals.voice_checks.noise import add_noise
-    from evals.voice_checks.scoring import heard_fact, is_correct, summarize
+    from evals.voice_checks.scoring import heard_fact, is_correct
 
     if synthesize is None:
         from deepgram import DeepgramClient
@@ -244,12 +276,7 @@ def main(argv: list[str] | None = None, *, synthesize: Synthesize | None = None,
     (out / "results.json").write_text(json.dumps({"rows": rows, "voice_timing": timing, "errors": errors}, indent=2))
 
     print()
-    print(model_table(rows))
-    for model in MODELS:
-        subset = [r for r in rows if r["model"] == model]
-        if subset:
-            print(f"\n=== {model} ===")
-            print(summarize(subset))
+    print(report(rows))
     if timing:
         print("\nTime to first audio (listening samples):")
         for t in timing:

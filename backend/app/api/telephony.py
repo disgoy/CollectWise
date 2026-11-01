@@ -27,7 +27,6 @@ from twilio.twiml.voice_response import Connect, Stream, VoiceResponse
 
 from backend.app import config
 from backend.app.agent.llm import LLMClient
-from backend.app.agent.prompts import SYSTEM_PROMPT
 from backend.app.agent.sessions import SessionStore, SessionStoreFullError
 from backend.app.api.live import _account_labels, _live_sessions, _start_token, encode_event
 from backend.app.api.providers import get_db_factory, get_live_llm, get_live_stt, get_live_tts, get_session_store
@@ -212,7 +211,7 @@ async def _answer(link: TwilioLink, websocket: WebSocket, store: SessionStore, l
     try:
         keyterms = await asyncio.to_thread(_account_labels, db_factory, customer_id)
         await run_live_call(
-            session, link, stt=stt, tts=tts, llm=llm, db_factory=db_factory, system=SYSTEM_PROMPT,
+            session, link, stt=stt, tts=tts, llm=llm, db_factory=db_factory,
             keyterms=keyterms, turn_limiter=turn_limiter, caller_audio=PHONE_AUDIO, reply_audio=PHONE_AUDIO,
         )
         # The agent's last words (a handoff, a time-limit goodbye) are still in

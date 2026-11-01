@@ -317,3 +317,48 @@ def test_a_voice_that_cant_speak_is_tried_once_not_for_every_phrase(deepgram_on,
     assert attempts.count("flux-rahul-hi") == 1
     assert attempts.count("flux-anjali-hi") == 2
     assert capsys.readouterr().out.count("flux-rahul-hi couldn't speak") == 1
+
+
+# --- scorer fixes from the first run (7.6 A2) -----------------------------------------------
+
+
+@pytest.mark.parametrize(("text", "expected"), [
+    ("Can you pay 125 dollars and 50cents?", ["125.50"]),  # as Flux wrote it
+    ("125 dollars and 50 cents", ["125.50"]),
+    ("125 रुपए 50 पैसे", ["125.50"]),
+    ("125 rupees aur 5 paise", ["125.05"]),
+    ("pay 125 dollars, and 50 more", ["125", "50"]),  # no cents: still two amounts
+])
+def test_units_and_cents_are_one_amount(text, expected) -> None:
+    from evals.voice_checks.scoring import amounts_in
+
+    assert amounts_in(text) == [Decimal(value) for value in expected]
+
+
+@pytest.mark.parametrize(("text", "meaning"), [
+    ("कर दो.", "yes"),  # "do it"
+    ("Kar dijiye", "yes"),
+    ("cancel कर दो", "no"),
+    ("mat kar do", "no"),
+    ("hakar do", "none"),  # a mishearing: phrases match whole words only
+    ("cannot sure", "yes"),  # "not sure" isn't in "cannot sure"; "sure" is a yes
+])
+def test_do_it_is_a_yes_and_phrases_match_whole_words(text, meaning) -> None:
+    assert classify_confirmation(text) == meaning
+
+
+def test_a_saved_run_can_be_scored_again_for_free(tmp_path, capsys, monkeypatch) -> None:
+    monkeypatch.delenv("COLLECTWISE_SPEECH", raising=False)  # no Deepgram needed
+    saved = tmp_path / "results.json"
+    row = {"model": "flux-general-multi", "set": "english", "source": "you", "noise": None, "kind": "amount",
+           "expect": "125.50", "phrase_id": "amount_dollars_and_cents", "confidence": 1.0, "confidence_min": 1.0}
+    saved.write_text(json.dumps({"rows": [
+        {**row, "transcript": "Can you pay 125 dollars and 50cents", "heard": "125,50", "correct": False},
+        {**row, "transcript": "Can you pay 25 dollars", "heard": "25", "correct": False},
+    ]}))
+
+    assert run_hindi_checks.main(["--rescore", str(saved)]) == 0
+
+    out = capsys.readouterr().out
+    assert "english, your voice 1/2" in " ".join(out.split())
+    assert "Re-scored 2 hearings" in out and "1 changed" in out

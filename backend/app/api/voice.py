@@ -10,7 +10,6 @@ from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Session
 
 from backend.app.agent.llm import LLMClient
-from backend.app.agent.prompts import SYSTEM_PROMPT
 from backend.app.agent.sessions import SessionStore
 from backend.app.api.providers import get_llm, get_session_store, get_stt, get_tts
 from backend.app.api.rate_limits import limit_turns
@@ -91,7 +90,7 @@ async def send_voice_turn(
         raise HTTPException(status_code=status, detail=exc.reason) from exc
 
     result = await run_in_threadpool(
-        run_voice_turn, session, clip, stt=stt, tts=tts, llm=llm, db=db, system=SYSTEM_PROMPT,
+        run_voice_turn, session, clip, stt=stt, tts=tts, llm=llm, db=db,
     )
     audio = None if result.audio is None else base64.b64encode(write_wav(result.audio)).decode("ascii")
     return VoiceTurnResponse(
