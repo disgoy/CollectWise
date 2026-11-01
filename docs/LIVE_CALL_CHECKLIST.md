@@ -48,8 +48,8 @@ Same setup; `python -m scripts.seed_demo` also creates *Demo Customer (India)*
 (savings ₹25,000, current ₹1,200). First, once, the free-credit check of the
 Hindi voice and listener (a few cents, no Claude):
 `COLLECTWISE_SPEECH=deepgram python -m scripts.smoke_live_speech --hindi`.
-If it shows the listener takes keyterms and hears "current" better with them,
-add `COLLECTWISE_HINDI_KEYTERMS=1` to the server command.
+Account names go to the Hindi listener as keyterms (it accepts them; set
+`COLLECTWISE_HINDI_KEYTERMS=0` to compare without).
 
 Sign in as Demo Customer (India), choose **हिंदी**, Start call.
 

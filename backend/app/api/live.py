@@ -246,7 +246,7 @@ async def live_call(
     try:
         keyterms = await asyncio.to_thread(_account_labels, db_factory, customer_id)
         if session.language == "hi" and not config.HINDI_KEYTERMS:
-            keyterms = []  # the multilingual listener may not take them (config.HINDI_KEYTERMS)
+            keyterms = []  # switched off (COLLECTWISE_HINDI_KEYTERMS=0)
         link = _WebSocketLink(websocket)
         await websocket.send_text(json.dumps({
             "type": "ready", "sample_rate_in": CALLER_SAMPLE_RATE, "sample_rate_out": tts.sample_rate,

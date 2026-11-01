@@ -201,7 +201,7 @@ in its configuration file.
 | `COLLECTWISE_HINDI_STT_MODEL` | `flux-general-multi` | Live listening for Hindi calls |
 | `COLLECTWISE_HINDI_LANGUAGE_HINTS` | `hi,en` | Languages that listener expects |
 | `COLLECTWISE_HINDI_TTS_VOICE` | `flux-rahul-hi` | Voice for Hindi calls (a `flux-*` voice, on `/v2/speak`) |
-| `COLLECTWISE_HINDI_KEYTERMS` | off | `1` sends account names to the Hindi listener as keyterms (`smoke_live_speech --hindi` checks it takes them) |
+| `COLLECTWISE_HINDI_KEYTERMS` | on | Account names go to the Hindi listener as keyterms, as for English (it accepts them); `0` turns that off |
 | `DEEPGRAM_API_KEY` | none | Deepgram credentials |
 | `COLLECTWISE_SESSION_IDLE_MINUTES` | `15` | A conversation unused this long expires |
 | `COLLECTWISE_MAX_SESSIONS_PER_CUSTOMER` | `3` | Open conversations per customer; a new one replaces their least recently used |

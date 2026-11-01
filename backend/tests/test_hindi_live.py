@@ -84,7 +84,7 @@ def test_english_calls_always_get_account_names(live_api, monkeypatch) -> None: 
 
 def test_the_hindi_settings_shipped() -> None:
     assert (config.HINDI_STT_MODEL, config.HINDI_LANGUAGE_HINTS, config.HINDI_TTS_VOICE, config.HINDI_KEYTERMS) == (
-        "flux-general-multi", ("hi", "en"), "flux-rahul-hi", False)
+        "flux-general-multi", ("hi", "en"), "flux-rahul-hi", True)
 
 
 def test_the_real_hindi_pair_is_the_multilingual_listener_and_rahul(monkeypatch) -> None:
@@ -147,3 +147,18 @@ def test_both_demo_customers_are_offered_by_default(client, monkeypatch) -> None
     offered = client.get("/demo/customers").json()
 
     assert [c["customer_id"] for c in offered] == ["cust_demo", "cust_demo_in"]
+
+
+@pytest.mark.parametrize(("value", "on"), [(None, True), ("1", True), ("", True), ("0", False)])
+def test_account_names_for_hindi_are_on_unless_switched_off(monkeypatch, value, on) -> None:
+    import importlib
+
+    if value is None:
+        monkeypatch.delenv("COLLECTWISE_HINDI_KEYTERMS", raising=False)
+    else:
+        monkeypatch.setenv("COLLECTWISE_HINDI_KEYTERMS", value)
+    try:
+        assert importlib.reload(config).HINDI_KEYTERMS is on
+    finally:
+        monkeypatch.delenv("COLLECTWISE_HINDI_KEYTERMS", raising=False)
+        importlib.reload(config)

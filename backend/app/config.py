@@ -106,13 +106,14 @@ LIVE_MIN_CONFIDENCE = float(os.environ.get("COLLECTWISE_LIVE_MIN_CONFIDENCE", "0
 LIVE_AGENT_THREADS = int(os.environ.get("COLLECTWISE_LIVE_AGENT_THREADS", "64"))
 # Live calls in Hindi (M7.6, D107-D108): the multilingual listener with
 # language hints, and a Hindi Flux voice. Account names go to that listener
-# as keyterms only if COLLECTWISE_HINDI_KEYTERMS=1: whether it accepts them is
-# undocumented (scripts/smoke_live_speech --hindi checks).
+# as keyterms, as for English calls (it accepts them, D113, and the user's
+# own "current" was misheard without them, D107); COLLECTWISE_HINDI_KEYTERMS=0
+# turns that off.
 HINDI_STT_MODEL = os.environ.get("COLLECTWISE_HINDI_STT_MODEL", "flux-general-multi")
 HINDI_LANGUAGE_HINTS = tuple(
     hint.strip() for hint in os.environ.get("COLLECTWISE_HINDI_LANGUAGE_HINTS", "hi,en").split(",") if hint.strip()
 )
 HINDI_TTS_VOICE = os.environ.get("COLLECTWISE_HINDI_TTS_VOICE", "flux-rahul-hi")
-HINDI_KEYTERMS = os.environ.get("COLLECTWISE_HINDI_KEYTERMS") == "1"
+HINDI_KEYTERMS = os.environ.get("COLLECTWISE_HINDI_KEYTERMS", "1") != "0"
 LIVE_MAX_CALL_MINUTES = float(os.environ.get("COLLECTWISE_LIVE_MAX_CALL_MINUTES", "15"))
 LIVE_SILENCE_MINUTES = float(os.environ.get("COLLECTWISE_LIVE_SILENCE_MINUTES", "2"))
