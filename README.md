@@ -9,6 +9,13 @@ person. Claude understands the request; a deterministic policy engine decides ev
 All data is synthetic, and no money moves: payment requests are evaluated and recorded,
 never executed.
 
+## Demo
+
+[![CollectWise demo: a Hindi call in the browser, with replies and response times](docs/media/demo-thumbnail.jpg)](docs/media/collectwise-demo.mp4)
+
+**[▶ Watch the 6-minute demo](docs/media/collectwise-demo.mp4)**: an English call and a Hindi
+call in the browser.
+
 ## At a glance
 
 | | |
