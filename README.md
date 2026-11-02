@@ -11,10 +11,10 @@ never executed.
 
 ## Demo
 
-[![CollectWise demo: a Hindi call in the browser, with replies and response times](docs/media/demo-thumbnail.jpg)](docs/media/collectwise-demo.mp4)
+[![CollectWise demo: a Hindi call in the browser, with replies and response times](docs/media/demo-thumbnail.jpg)](https://github.com/user-attachments/assets/c2bb40ef-70db-4666-bad0-c935034825ca)
 
-**[▶ Watch the 6-minute demo](docs/media/collectwise-demo.mp4)**: an English call and a Hindi
-call in the browser.
+**[▶ Watch the 6-minute demo](https://github.com/user-attachments/assets/c2bb40ef-70db-4666-bad0-c935034825ca)**:
+an English call and a Hindi call in the browser.
 
 ## At a glance
 
